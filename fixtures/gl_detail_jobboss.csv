@@ -1,0 +1,10 @@
+Account ID,Account Name,Amount,Posting Date
+5100,Inventory Adjustment,28500,2025-01-15
+5100,Inventory Adjustment,15200,2025-02-01
+5100,Inventory Shrinkage,8900,2025-02-10
+1200,Accounts Receivable,45000,2025-01-20
+2100,Accounts Payable,-12000,2025-01-22
+6200,Direct Labor,34000,2025-02-05
+5100,Inventory Adjustment,22100,2025-02-15
+,Unmapped Entry,5000,2025-02-18
+6300,Overhead Allocation,18500,2025-02-20

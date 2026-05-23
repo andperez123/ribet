@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+api/.venv/
+.venv/
+
+# Build / cache
+web/.next/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Environment (keep *.example)
+.env
+.env.local
+.env.*.local
+!.env.example
+!**/.env.example
+!**/.env.local.example
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs / local storage
+*.log
+/tmp/rivet-uploads/
+/tmp/rivet-test-uploads/
+
+# Test / coverage
+.coverage
+htmlcov/
+.tox/

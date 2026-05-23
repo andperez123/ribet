@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --rivet-green: #a3c957;
+  --rivet-text: #111111;
+  --rivet-bg: #f7f7f4;
+  --rivet-card: #ffffff;
+  --rivet-border: #e8e8e3;
+  --rivet-risk: #d96b6b;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-rivet-bg text-rivet-text antialiased;
+  font-family: var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.animate-float {
+  animation: float 3.5s ease-in-out infinite;
+}
+
+.animate-breathe {
+  animation: breathe 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-breathe {
+    animation: none;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}

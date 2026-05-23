@@ -1,0 +1,368 @@
+openapi: 3.1.0
+info:
+  title: Rivet API
+  version: 0.2.0
+  description: Operational intelligence infrastructure for manufacturers
+
+paths:
+  /v1/ingest/uploads:
+    post:
+      summary: Upload ERP export files
+      security:
+        - ApiKeyAuth: []
+        - OrgIdHeader: []
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                sector:
+                  type: string
+                  enum: [financials, manufacturing, orders, sales]
+                  description: Business sector for this upload batch
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadJobsResponse"
+
+  /v1/org/progress:
+    get:
+      summary: Sector coverage and unlocked logistics capabilities
+      security:
+        - ApiKeyAuth: []
+        - OrgIdHeader: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgProgress"
+
+  /v1/ingest/jobs:
+    get:
+      summary: List ingest jobs for organization
+      security:
+        - ApiKeyAuth: []
+        - OrgIdHeader: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadJobsResponse"
+
+  /v1/ingest/jobs/{job_id}:
+    get:
+      summary: Get ingest job status
+      security:
+        - ApiKeyAuth: []
+        - OrgIdHeader: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadJob"
+
+  /v1/reports/{report_id}:
+    get:
+      summary: Get Operational Health Report
+      security:
+        - ApiKeyAuth: []
+        - OrgIdHeader: []
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalReport"
+
+  /v1/reports/latest:
+    get:
+      summary: Latest Operational Health Report
+      security:
+        - ApiKeyAuth: []
+        - OrgIdHeader: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalReport"
+
+  /v1/findings:
+    get:
+      summary: List operational findings
+      security:
+        - ApiKeyAuth: []
+        - OrgIdHeader: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Finding"
+
+  /v1/health/score:
+    get:
+      summary: Latest operational health score
+      security:
+        - ApiKeyAuth: []
+        - OrgIdHeader: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthScore"
+
+  /v1/health/history:
+    get:
+      summary: Health score history for trends
+      security:
+        - ApiKeyAuth: []
+        - OrgIdHeader: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthHistory"
+
+  /v1/brief/weekly:
+    get:
+      summary: Weekly executive brief
+      security:
+        - ApiKeyAuth: []
+        - OrgIdHeader: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyBrief"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    OrgIdHeader:
+      type: apiKey
+      in: header
+      name: X-Org-Id
+
+  schemas:
+    UploadStatus:
+      type: string
+      enum: [pending, processing, done, error]
+
+    UploadJob:
+      type: object
+      required: [id, status, file_name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/UploadStatus"
+        file_name:
+          type: string
+        sector:
+          type: string
+          enum: [financials, manufacturing, orders, sales]
+        errors:
+          type: array
+          items:
+            type: string
+        report_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UploadJobsResponse:
+      type: object
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/UploadJob"
+
+    OrgProgress:
+      type: object
+      properties:
+        sectors:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorStatus"
+        capabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/CapabilityStatus"
+        coverage_count:
+          type: integer
+
+    SectorStatus:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        covered:
+          type: boolean
+        count:
+          type: integer
+        last_upload_at:
+          type: string
+          format: date-time
+        last_report_type:
+          type: string
+
+    CapabilityStatus:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        unlocked:
+          type: boolean
+        requirement:
+          type: string
+
+    Finding:
+      type: object
+      properties:
+        finding_type:
+          type: string
+        title:
+          type: string
+        detail:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        confidence:
+          type: number
+        business_impact:
+          type: string
+        department:
+          type: string
+        category:
+          type: string
+        suggested_action:
+          type: string
+
+    HealthScore:
+      type: object
+      properties:
+        score:
+          type: integer
+        status:
+          type: string
+        components:
+          type: object
+        computed_at:
+          type: string
+
+    HealthHistory:
+      type: object
+      properties:
+        snapshots:
+          type: array
+          items:
+            $ref: "#/components/schemas/HealthScore"
+
+    OperationalReport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: string
+          format: uuid
+        executive_summary:
+          type: array
+          items:
+            type: string
+        financial_findings:
+          type: array
+          items:
+            type: object
+        operational_findings:
+          type: array
+          items:
+            type: object
+        risk_areas:
+          type: array
+          items:
+            type: object
+        suggested_actions:
+          type: array
+          items:
+            type: string
+        trend_snapshot:
+          type: array
+          items:
+            type: string
+        health_score:
+          type: integer
+        health_status:
+          type: string
+        generated_at:
+          type: string
+
+    WeeklyBrief:
+      type: object
+      properties:
+        org_id:
+          type: string
+          format: uuid
+        period:
+          type: string
+        sections:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
