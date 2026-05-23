@@ -28,7 +28,7 @@ export function Logo({ href = "/" }: LogoProps) {
   return (
     <Link href={href} className="flex items-center gap-2">
       <FrogMark className="h-8 w-8" />
-      <span className="text-lg font-semibold tracking-tight text-rivet-text">
+      <span className="text-lg font-semibold tracking-tight text-ribet-text">
         ribet
       </span>
     </Link>

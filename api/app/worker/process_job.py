@@ -87,7 +87,7 @@ def run_worker():
     from app.database import Base, engine
 
     Base.metadata.create_all(bind=engine)
-    print("Rivet worker started")
+    print("Ribet worker started")
     while True:
         db = SessionLocal()
         try:

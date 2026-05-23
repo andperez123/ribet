@@ -34,9 +34,9 @@ export function formatDate(iso: string | null | undefined): string {
 
 export function healthStatusColor(status: string): string {
   const s = status.toLowerCase();
-  if (s.includes("critical") || s.includes("risk")) return "text-rivet-risk";
-  if (s.includes("stable") || s.includes("good")) return "text-rivet-green";
-  return "text-rivet-text";
+  if (s.includes("critical") || s.includes("risk")) return "text-ribet-risk";
+  if (s.includes("stable") || s.includes("good")) return "text-ribet-green";
+  return "text-ribet-text";
 }
 
 export const COMPONENT_LABELS: Record<string, string> = {

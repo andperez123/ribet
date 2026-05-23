@@ -8,12 +8,12 @@ export function FinalCta() {
     <section id="demo" className="py-24 md:py-32">
       <Container>
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-semibold leading-tight tracking-tight text-rivet-text md:text-4xl">
+          <h2 className="text-3xl font-semibold leading-tight tracking-tight text-ribet-text md:text-4xl">
             {finalCta.headline[0]}
             <br />
             {finalCta.headline[1]}
           </h2>
-          <p className="mt-6 text-lg text-rivet-muted">{finalCta.subtext}</p>
+          <p className="mt-6 text-lg text-ribet-muted">{finalCta.subtext}</p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
             <Button href={getDemoUrl()} className="!px-8 !py-4 text-base">
               {finalCta.cta}

@@ -39,7 +39,7 @@ export type FeatureCard = {
   icon: LucideIcon;
 };
 
-export const whatRivetDoes: FeatureCard[] = [
+export const whatRibetDoes: FeatureCard[] = [
   {
     title: "Detect issues",
     description: [

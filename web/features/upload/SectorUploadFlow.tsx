@@ -65,14 +65,14 @@ export function SectorUploadFlow() {
               onClick={() => setActiveSector(sector.id)}
               className={`rounded-xl border px-4 py-3 text-left transition-colors ${
                 selected
-                  ? "border-rivet-green bg-rivet-green/10"
-                  : "border-rivet-border bg-rivet-card hover:border-rivet-green/40"
+                  ? "border-ribet-green bg-ribet-green/10"
+                  : "border-ribet-border bg-ribet-card hover:border-ribet-green/40"
               }`}
             >
               <Icon
-                className={`h-5 w-5 ${selected ? "text-rivet-green" : "text-rivet-muted"}`}
+                className={`h-5 w-5 ${selected ? "text-ribet-green" : "text-ribet-muted"}`}
               />
-              <p className="mt-2 text-sm font-semibold text-rivet-text">
+              <p className="mt-2 text-sm font-semibold text-ribet-text">
                 {sector.label}
               </p>
             </button>
@@ -80,9 +80,9 @@ export function SectorUploadFlow() {
         })}
       </div>
 
-      <p className="mb-4 text-center text-sm text-rivet-muted">
+      <p className="mb-4 text-center text-sm text-ribet-muted">
         {activeDef.description}{" "}
-        <span className="text-rivet-text/80">({activeDef.examples})</span>
+        <span className="text-ribet-text/80">({activeDef.examples})</span>
       </p>
 
       <div
@@ -98,10 +98,10 @@ export function SectorUploadFlow() {
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={onDrop}
-        className={`flex min-h-[200px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-rivet-card px-8 py-14 transition-colors md:min-h-[220px] ${
+        className={`flex min-h-[200px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-ribet-card px-8 py-14 transition-colors md:min-h-[220px] ${
           isDragging
-            ? "border-rivet-green bg-rivet-green/5"
-            : "border-rivet-border hover:border-rivet-green/50"
+            ? "border-ribet-green bg-ribet-green/5"
+            : "border-ribet-border hover:border-ribet-green/50"
         }`}
       >
         <input
@@ -114,28 +114,28 @@ export function SectorUploadFlow() {
         />
 
         {isUploading ? (
-          <Loader2 className="h-10 w-10 animate-spin text-rivet-green" />
+          <Loader2 className="h-10 w-10 animate-spin text-ribet-green" />
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rivet-green/15">
-            <Upload className="h-7 w-7 text-rivet-green" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-ribet-green/15">
+            <Upload className="h-7 w-7 text-ribet-green" />
           </div>
         )}
 
-        <p className="mt-5 text-lg font-semibold text-rivet-text">
+        <p className="mt-5 text-lg font-semibold text-ribet-text">
           Upload to {activeDef.label}
         </p>
-        <p className="mt-1 text-sm text-rivet-muted">
+        <p className="mt-1 text-sm text-ribet-muted">
           {uploadSection.boxSubtitle}
         </p>
       </div>
 
-      <p className="mt-4 text-center text-xs text-rivet-muted">
+      <p className="mt-4 text-center text-xs text-ribet-muted">
         {uploadSection.helper} Upload across sectors to unlock logistics insights
         on your dashboard.
       </p>
 
       {error && (
-        <p className="mt-3 text-center text-sm text-rivet-risk">{error}</p>
+        <p className="mt-3 text-center text-sm text-ribet-risk">{error}</p>
       )}
 
       {files.length > 0 && (
@@ -143,12 +143,12 @@ export function SectorUploadFlow() {
           {files.map((f) => (
             <div
               key={f.id}
-              className="flex items-center gap-3 rounded-lg border border-rivet-border bg-rivet-card px-4 py-3 text-sm"
+              className="flex items-center gap-3 rounded-lg border border-ribet-border bg-ribet-card px-4 py-3 text-sm"
             >
               {f.status === "done" ? (
-                <CheckCircle className="h-4 w-4 shrink-0 text-rivet-green" />
+                <CheckCircle className="h-4 w-4 shrink-0 text-ribet-green" />
               ) : (
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-rivet-green" />
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ribet-green" />
               )}
               <span className="flex-1 truncate">{f.name}</span>
               {f.sector && (
@@ -156,7 +156,7 @@ export function SectorUploadFlow() {
                   {f.sector}
                 </Badge>
               )}
-              <span className="text-xs capitalize text-rivet-muted">
+              <span className="text-xs capitalize text-ribet-muted">
                 {f.status}
               </span>
             </div>
@@ -166,21 +166,21 @@ export function SectorUploadFlow() {
               {lastReportId && (
                 <Link
                   href={`/dashboard/reports/${lastReportId}`}
-                  className="rounded-full bg-rivet-green px-4 py-2 text-sm font-medium text-rivet-text hover:opacity-90"
+                  className="rounded-full bg-ribet-green px-4 py-2 text-sm font-medium text-ribet-text hover:opacity-90"
                 >
                   View report
                 </Link>
               )}
               <Link
                 href="/dashboard"
-                className="text-sm font-medium text-rivet-muted hover:text-rivet-text"
+                className="text-sm font-medium text-ribet-muted hover:text-ribet-text"
               >
                 Open dashboard
               </Link>
               <button
                 type="button"
                 onClick={clear}
-                className="text-xs text-rivet-muted underline hover:text-rivet-text"
+                className="text-xs text-ribet-muted underline hover:text-ribet-text"
               >
                 Clear
               </button>

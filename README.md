@@ -1,4 +1,4 @@
-# Rivet
+# Ribet
 
 Operational intelligence infrastructure for manufacturers.
 
@@ -77,7 +77,7 @@ DATABASE_URL=sqlite:///./test.db pytest tests/ -v
 ## Project structure
 
 ```
-Rivet/
+Ribet/
 ├── api/           FastAPI + worker
 ├── web/           Next.js landing + BFF
 ├── fixtures/      Demo CSV exports

@@ -16,7 +16,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Rivet API",
+    title="Ribet API",
     description="Operational intelligence infrastructure for manufacturers",
     version="0.1.0",
     lifespan=lifespan,

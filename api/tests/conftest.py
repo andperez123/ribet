@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("API_KEY", "dev-secret")
 os.environ.setdefault("STORAGE_BACKEND", "local")
-os.environ.setdefault("LOCAL_STORAGE_PATH", "/tmp/rivet-test-uploads")
+os.environ.setdefault("LOCAL_STORAGE_PATH", "/tmp/ribet-test-uploads")
 
 USE_SQLITE = os.environ.get("TEST_USE_SQLITE") == "1"
 

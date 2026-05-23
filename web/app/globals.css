@@ -3,12 +3,12 @@
 @tailwind utilities;
 
 :root {
-  --rivet-green: #a3c957;
-  --rivet-text: #111111;
-  --rivet-bg: #f7f7f4;
-  --rivet-card: #ffffff;
-  --rivet-border: #e8e8e3;
-  --rivet-risk: #d96b6b;
+  --ribet-green: #a3c957;
+  --ribet-text: #111111;
+  --ribet-bg: #f7f7f4;
+  --ribet-card: #ffffff;
+  --ribet-border: #e8e8e3;
+  --ribet-risk: #d96b6b;
 }
 
 html {
@@ -16,7 +16,7 @@ html {
 }
 
 body {
-  @apply bg-rivet-bg text-rivet-text antialiased;
+  @apply bg-ribet-bg text-ribet-text antialiased;
   font-family: var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif;
 }
 

@@ -9,7 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        rivet: {
+        ribet: {
           green: "#A3C957",
           text: "#111111",
           bg: "#F7F7F4",

@@ -13,14 +13,14 @@ export function HealthComponentsGrid({ score }: { score: HealthScore }) {
       {entries.map(([key, value]) => (
         <div
           key={key}
-          className="rounded-2xl border border-rivet-border bg-rivet-card p-6"
+          className="rounded-2xl border border-ribet-border bg-ribet-card p-6"
         >
-          <p className="text-sm text-rivet-muted">
+          <p className="text-sm text-ribet-muted">
             {COMPONENT_LABELS[key] ?? key.replace(/_/g, " ")}
           </p>
           <p
             className={`mt-2 text-2xl font-semibold ${
-              value < 60 ? "text-rivet-risk" : "text-rivet-text"
+              value < 60 ? "text-ribet-risk" : "text-ribet-text"
             }`}
           >
             {value}

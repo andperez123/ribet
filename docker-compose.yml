@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: rivet
-      POSTGRES_PASSWORD: rivet
-      POSTGRES_DB: rivet
+      POSTGRES_USER: ribet
+      POSTGRES_PASSWORD: ribet
+      POSTGRES_DB: ribet
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rivet"]
+      test: ["CMD-SHELL", "pg_isready -U ribet"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -40,7 +40,7 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://minio:9000 minioadmin minioadmin;
-      mc mb local/rivet-uploads --ignore-existing;
+      mc mb local/ribet-uploads --ignore-existing;
       exit 0;
       "
 
@@ -49,11 +49,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://rivet:rivet@postgres:5432/rivet
+      DATABASE_URL: postgresql://ribet:ribet@postgres:5432/ribet
       S3_ENDPOINT: http://minio:9000
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
-      S3_BUCKET: rivet-uploads
+      S3_BUCKET: ribet-uploads
       API_KEY: dev-secret
     depends_on:
       postgres:
@@ -68,11 +68,11 @@ services:
     build: ./api
     command: python -m app.worker.process_job
     environment:
-      DATABASE_URL: postgresql://rivet:rivet@postgres:5432/rivet
+      DATABASE_URL: postgresql://ribet:ribet@postgres:5432/ribet
       S3_ENDPOINT: http://minio:9000
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
-      S3_BUCKET: rivet-uploads
+      S3_BUCKET: ribet-uploads
       API_KEY: dev-secret
     depends_on:
       postgres:

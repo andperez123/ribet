@@ -24,17 +24,17 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-rivet-text md:text-3xl">
+          <h1 className="text-2xl font-semibold tracking-tight text-ribet-text md:text-3xl">
             Dashboard
           </h1>
-          <p className="mt-1 text-sm text-rivet-muted">
+          <p className="mt-1 text-sm text-ribet-muted">
             Operational health and findings from your latest data.
           </p>
         </div>
         {report && (
           <Link
             href={`/dashboard/reports/${report.id}`}
-            className="rounded-full bg-rivet-green px-5 py-2.5 text-sm font-medium text-rivet-text hover:opacity-90"
+            className="rounded-full bg-ribet-green px-5 py-2.5 text-sm font-medium text-ribet-text hover:opacity-90"
           >
             View full report
           </Link>

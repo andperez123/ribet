@@ -12,10 +12,10 @@ type ButtonProps = {
 
 const variants = {
   primary:
-    "bg-rivet-green text-rivet-text hover:opacity-90 shadow-sm",
+    "bg-ribet-green text-ribet-text hover:opacity-90 shadow-sm",
   secondary:
-    "bg-transparent text-rivet-text hover:bg-rivet-border/50",
-  ghost: "bg-transparent text-rivet-muted hover:text-rivet-text",
+    "bg-transparent text-ribet-text hover:bg-ribet-border/50",
+  ghost: "bg-transparent text-ribet-muted hover:text-ribet-text",
 };
 
 export function Button({

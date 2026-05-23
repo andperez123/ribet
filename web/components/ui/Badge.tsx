@@ -5,10 +5,10 @@ type BadgeProps = {
 };
 
 const variants = {
-  default: "bg-rivet-green/15 text-rivet-green",
-  success: "bg-rivet-green/15 text-rivet-green",
-  risk: "bg-rivet-risk/15 text-rivet-risk",
-  muted: "bg-rivet-border/50 text-rivet-muted",
+  default: "bg-ribet-green/15 text-ribet-green",
+  success: "bg-ribet-green/15 text-ribet-green",
+  risk: "bg-ribet-risk/15 text-ribet-risk",
+  muted: "bg-ribet-border/50 text-ribet-muted",
 };
 
 export function Badge({

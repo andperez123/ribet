@@ -5,6 +5,7 @@ api/.venv/
 
 # Build / cache
 web/.next/
+web/tsconfig.tsbuildinfo
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -28,8 +29,8 @@ build/
 
 # Logs / local storage
 *.log
-/tmp/rivet-uploads/
-/tmp/rivet-test-uploads/
+/tmp/ribet-uploads/
+/tmp/ribet-test-uploads/
 
 # Test / coverage
 .coverage

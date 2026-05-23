@@ -24,14 +24,14 @@ export default async function ReportPage({ params }: Props) {
       <div>
         <Link
           href="/dashboard"
-          className="text-sm font-medium text-rivet-muted hover:text-rivet-text"
+          className="text-sm font-medium text-ribet-muted hover:text-ribet-text"
         >
           ← Dashboard
         </Link>
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-rivet-text md:text-3xl">
+        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-ribet-text md:text-3xl">
           Operational Health Report
         </h1>
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-rivet-muted">
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-ribet-muted">
           <span>Generated {formatDate(report.generated_at)}</span>
           <Badge variant="default">{report.health_score} / 100</Badge>
           <span className={healthStatusColor(report.health_status)}>

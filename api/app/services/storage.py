@@ -5,7 +5,7 @@ from uuid import UUID
 
 from app.config import settings
 
-LOCAL_STORAGE = Path(os.environ.get("LOCAL_STORAGE_PATH", "/tmp/rivet-uploads"))
+LOCAL_STORAGE = Path(os.environ.get("LOCAL_STORAGE_PATH", "/tmp/ribet-uploads"))
 
 
 def _use_local() -> bool:

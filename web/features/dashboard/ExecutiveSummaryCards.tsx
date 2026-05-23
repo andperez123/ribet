@@ -13,10 +13,10 @@ export function ExecutiveSummaryCards({
       {items.map((line, i) => (
         <div
           key={i}
-          className="rounded-2xl border border-rivet-border bg-rivet-card p-6"
+          className="rounded-2xl border border-ribet-border bg-ribet-card p-6"
         >
-          <p className="text-sm text-rivet-muted">Signal {i + 1}</p>
-          <p className="mt-2 text-lg font-semibold text-rivet-risk">{line}</p>
+          <p className="text-sm text-ribet-muted">Signal {i + 1}</p>
+          <p className="mt-2 text-lg font-semibold text-ribet-risk">{line}</p>
         </div>
       ))}
     </div>

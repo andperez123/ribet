@@ -1,4 +1,4 @@
-# Rivet API Contract
+# Ribet API Contract
 
 Source of truth: [`openapi.yaml`](./openapi.yaml)
 

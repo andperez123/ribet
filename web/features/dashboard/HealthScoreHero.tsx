@@ -9,15 +9,15 @@ export function HealthScoreHero({ score }: { score: HealthScore }) {
   return (
     <Card className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div>
-        <p className="text-sm text-rivet-muted">Operational health</p>
+        <p className="text-sm text-ribet-muted">Operational health</p>
         <div className="mt-2 flex items-baseline gap-3">
-          <span className="text-5xl font-semibold tracking-tight text-rivet-text">
+          <span className="text-5xl font-semibold tracking-tight text-ribet-text">
             {score.score}
           </span>
-          <span className="text-lg text-rivet-muted">/ 100</span>
+          <span className="text-lg text-ribet-muted">/ 100</span>
         </div>
         {score.computed_at && (
-          <p className="mt-2 text-xs text-rivet-muted">
+          <p className="mt-2 text-xs text-ribet-muted">
             Updated {new Date(score.computed_at).toLocaleString()}
           </p>
         )}

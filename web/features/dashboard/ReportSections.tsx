@@ -4,16 +4,16 @@ import { SeverityBadge } from "./SeverityBadge";
 
 function FindingBlock({ finding }: { finding: ReportFinding }) {
   return (
-    <li className="border-b border-rivet-border/60 py-4 last:border-0">
+    <li className="border-b border-ribet-border/60 py-4 last:border-0">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="font-medium text-rivet-text">{finding.title}</p>
+        <p className="font-medium text-ribet-text">{finding.title}</p>
         {finding.severity && <SeverityBadge severity={finding.severity} />}
       </div>
       {finding.detail && (
-        <p className="mt-1 text-sm text-rivet-muted">{finding.detail}</p>
+        <p className="mt-1 text-sm text-ribet-muted">{finding.detail}</p>
       )}
       {finding.suggested_action && (
-        <p className="mt-2 text-xs text-rivet-green">
+        <p className="mt-2 text-xs text-ribet-green">
           → {finding.suggested_action}
         </p>
       )}
@@ -31,7 +31,7 @@ function Section({
   if (!findings.length) return null;
   return (
     <Card>
-      <h3 className="text-sm font-semibold text-rivet-text">{title}</h3>
+      <h3 className="text-sm font-semibold text-ribet-text">{title}</h3>
       <ul className="mt-2">
         {findings.map((f, i) => (
           <FindingBlock key={`${f.title}-${i}`} finding={f} />
@@ -46,10 +46,10 @@ export function ReportSections({ report }: { report: OperationalReport }) {
     <div className="space-y-6">
       {report.executive_summary.length > 0 && (
         <Card>
-          <h3 className="text-sm font-semibold text-rivet-text">
+          <h3 className="text-sm font-semibold text-ribet-text">
             Executive summary
           </h3>
-          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-rivet-muted">
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ribet-muted">
             {report.executive_summary.map((line, i) => (
               <li key={i}>{line}</li>
             ))}
@@ -66,10 +66,10 @@ export function ReportSections({ report }: { report: OperationalReport }) {
 
       {report.suggested_actions.length > 0 && (
         <Card>
-          <h3 className="text-sm font-semibold text-rivet-text">
+          <h3 className="text-sm font-semibold text-ribet-text">
             Suggested actions
           </h3>
-          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-rivet-muted">
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ribet-muted">
             {report.suggested_actions.map((action, i) => (
               <li key={i}>{action}</li>
             ))}
@@ -79,8 +79,8 @@ export function ReportSections({ report }: { report: OperationalReport }) {
 
       {report.trend_snapshot.length > 0 && (
         <Card>
-          <h3 className="text-sm font-semibold text-rivet-text">Trends</h3>
-          <ul className="mt-3 space-y-2 text-sm text-rivet-muted">
+          <h3 className="text-sm font-semibold text-ribet-text">Trends</h3>
+          <ul className="mt-3 space-y-2 text-sm text-ribet-muted">
             {report.trend_snapshot.map((line, i) => (
               <li key={i}>{line}</li>
             ))}

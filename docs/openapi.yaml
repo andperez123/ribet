@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Rivet API
+  title: Ribet API
   version: 0.2.0
   description: Operational intelligence infrastructure for manufacturers
 

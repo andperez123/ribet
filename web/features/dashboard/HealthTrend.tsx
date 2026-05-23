@@ -9,7 +9,7 @@ export function HealthTrend({ history }: { history: HealthHistory }) {
 
   return (
     <Card>
-      <p className="text-sm font-medium text-rivet-text">Health trend</p>
+      <p className="text-sm font-medium text-ribet-text">Health trend</p>
       <div className="mt-6 flex h-24 items-end gap-1.5">
         {snapshots.map((snap, i) => (
           <div
@@ -18,13 +18,13 @@ export function HealthTrend({ history }: { history: HealthHistory }) {
             title={`${snap.score} — ${snap.status}`}
           >
             <div
-              className="w-full rounded-t bg-rivet-green/70 transition-all"
+              className="w-full rounded-t bg-ribet-green/70 transition-all"
               style={{ height: `${Math.max(8, (snap.score / max) * 100)}%` }}
             />
           </div>
         ))}
       </div>
-      <p className="mt-3 text-xs text-rivet-muted">
+      <p className="mt-3 text-xs text-ribet-muted">
         Last {snapshots.length} snapshots (oldest → newest)
       </p>
     </Card>

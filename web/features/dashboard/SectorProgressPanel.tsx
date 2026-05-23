@@ -44,7 +44,7 @@ export function SectorProgressPanel({ progress, findings }: Props) {
     <div className="space-y-6">
       <Card>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-rivet-text">
+          <h2 className="text-sm font-semibold text-ribet-text">
             Data coverage
           </h2>
           <Badge variant="default">
@@ -57,24 +57,24 @@ export function SectorProgressPanel({ progress, findings }: Props) {
               key={sector.id}
               className={`rounded-lg border px-3 py-2 text-sm ${
                 sector.covered
-                  ? "border-rivet-green/40 bg-rivet-green/10"
-                  : "border-rivet-border bg-rivet-card/50"
+                  ? "border-ribet-green/40 bg-ribet-green/10"
+                  : "border-ribet-border bg-ribet-card/50"
               }`}
             >
-              <span className="font-medium text-rivet-text">{sector.label}</span>
+              <span className="font-medium text-ribet-text">{sector.label}</span>
               {sector.covered ? (
-                <span className="ml-2 text-xs text-rivet-muted">
+                <span className="ml-2 text-xs text-ribet-muted">
                   {sector.count} file{sector.count === 1 ? "" : "s"}
                 </span>
               ) : (
-                <span className="ml-2 text-xs text-rivet-muted">Not yet</span>
+                <span className="ml-2 text-xs text-ribet-muted">Not yet</span>
               )}
             </div>
           ))}
         </div>
         {coverage_count < sectors.length && (
-          <p className="mt-4 text-sm text-rivet-muted">
-            <Link href="/#upload" className="font-medium text-rivet-green hover:underline">
+          <p className="mt-4 text-sm text-ribet-muted">
+            <Link href="/#upload" className="font-medium text-ribet-green hover:underline">
               Upload more sectors
             </Link>{" "}
             to unlock logistics insights below.
@@ -83,7 +83,7 @@ export function SectorProgressPanel({ progress, findings }: Props) {
       </Card>
 
       <div>
-        <h2 className="mb-3 text-sm font-semibold text-rivet-text">
+        <h2 className="mb-3 text-sm font-semibold text-ribet-text">
           Logistics insights
         </h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -96,28 +96,28 @@ export function SectorProgressPanel({ progress, findings }: Props) {
                 key={cap.id}
                 className={
                   cap.unlocked
-                    ? "border-rivet-green/30"
-                    : "border-rivet-border opacity-90"
+                    ? "border-ribet-green/30"
+                    : "border-ribet-border opacity-90"
                 }
               >
                 <div className="flex items-start gap-2">
                   {cap.unlocked ? (
-                    <Unlock className="mt-0.5 h-4 w-4 shrink-0 text-rivet-green" />
+                    <Unlock className="mt-0.5 h-4 w-4 shrink-0 text-ribet-green" />
                   ) : (
-                    <Lock className="mt-0.5 h-4 w-4 shrink-0 text-rivet-muted" />
+                    <Lock className="mt-0.5 h-4 w-4 shrink-0 text-ribet-muted" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium text-rivet-text">{cap.name}</p>
-                    <p className="mt-1 text-xs text-rivet-muted">
+                    <p className="font-medium text-ribet-text">{cap.name}</p>
+                    <p className="mt-1 text-xs text-ribet-muted">
                       {cap.description}
                     </p>
                     {cap.unlocked ? (
-                      <p className="mt-2 text-sm text-rivet-text">
+                      <p className="mt-2 text-sm text-ribet-text">
                         {insight ??
                           "Upload more data in this area to deepen insights."}
                       </p>
                     ) : (
-                      <p className="mt-2 text-xs text-rivet-muted">
+                      <p className="mt-2 text-xs text-ribet-muted">
                         {cap.requirement}
                       </p>
                     )}

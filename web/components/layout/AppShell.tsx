@@ -8,8 +8,8 @@ const nav = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-rivet-bg">
-      <header className="sticky top-0 z-50 border-b border-rivet-border/60 bg-rivet-bg/90 backdrop-blur-md">
+    <div className="min-h-screen bg-ribet-bg">
+      <header className="sticky top-0 z-50 border-b border-ribet-border/60 bg-ribet-bg/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 md:h-20 md:px-10">
           <Logo href="/dashboard" />
           <nav className="hidden items-center gap-6 sm:flex">
@@ -17,7 +17,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className="text-sm font-medium text-rivet-muted hover:text-rivet-text"
+                className="text-sm font-medium text-ribet-muted hover:text-ribet-text"
               >
                 {item.label}
               </Link>
@@ -25,7 +25,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
           <Link
             href="/"
-            className="text-sm font-medium text-rivet-muted hover:text-rivet-text"
+            className="text-sm font-medium text-ribet-muted hover:text-ribet-text"
           >
             Back to site
           </Link>
@@ -39,7 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className="block rounded-lg px-3 py-2 text-sm font-medium text-rivet-muted hover:bg-rivet-card hover:text-rivet-text"
+                className="block rounded-lg px-3 py-2 text-sm font-medium text-ribet-muted hover:bg-ribet-card hover:text-ribet-text"
               >
                 {item.label}
               </Link>
