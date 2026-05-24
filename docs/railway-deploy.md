@@ -75,10 +75,11 @@ No code changes required — storage uses boto3 S3-compatible API.
 
 ## Health checks
 
-| Service | Path |
-|---------|------|
-| API | `GET /health` (includes DB check) |
-| Web | `GET /api/health` |
+| Service | Path | Purpose |
+|---------|------|---------|
+| API | `GET /health` | Liveness (Railway healthcheck) |
+| API | `GET /health/ready` | Readiness (includes DB check) |
+| Web | `GET /api/health` | Liveness |
 
 Configure these in Railway service settings for reliable deploys.
 
@@ -163,3 +164,16 @@ ADMIN_API_KEY=dev-admin-secret
 ```
 
 Then open http://localhost:3000/admin/metrics?key=dev-admin-secret
+
+## Fix: Healthcheck failure with 0 variables
+
+If deploy fails at **Network › Healthcheck** and the service shows **0 Variables**:
+
+1. **+ New** → **Database** → **PostgreSQL** (in the same project)
+2. Open the **ribet** (API) service → **Variables** → **+ New Variable**
+3. Add `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`  
+   (click **Add Reference** and pick your Postgres service — the name may not be exactly `Postgres`)
+4. Add `API_KEY` and `ADMIN_API_KEY` (random secrets)
+5. **Redeploy**
+
+Without `DATABASE_URL`, the API cannot start (it defaults to `localhost:5432`, which does not exist on Railway).

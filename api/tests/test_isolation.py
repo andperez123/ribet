@@ -25,6 +25,12 @@ def test_health_endpoint(client):
     assert r.json()["ok"] is True
 
 
+def test_health_ready(client):
+    r = client.get("/health/ready")
+    assert r.status_code == 200
+    assert r.json()["database"] == "connected"
+
+
 def test_health_score_requires_org(client):
     r = client.get("/v1/health/score", headers={"X-API-Key": API_KEY})
     assert r.status_code == 400
