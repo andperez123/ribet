@@ -55,6 +55,8 @@ services:
       S3_SECRET_KEY: minioadmin
       S3_BUCKET: ribet-uploads
       API_KEY: dev-secret
+      ADMIN_API_KEY: dev-admin-secret
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,6 +76,8 @@ services:
       S3_SECRET_KEY: minioadmin
       S3_BUCKET: ribet-uploads
       API_KEY: dev-secret
+      ADMIN_API_KEY: dev-admin-secret
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
     depends_on:
       postgres:
         condition: service_healthy

@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("API_KEY", "dev-secret")
+os.environ.setdefault("ADMIN_API_KEY", "dev-admin-secret")
 os.environ.setdefault("STORAGE_BACKEND", "local")
 os.environ.setdefault("LOCAL_STORAGE_PATH", "/tmp/ribet-test-uploads")
 

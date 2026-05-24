@@ -5,6 +5,7 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.models import IngestJob, Organization
+from app.services.events import emit_event
 from app.services.sectors import validate_sector
 from app.services.storage import upload_file
 
@@ -47,6 +48,13 @@ async def create_upload_jobs(
 
         key = upload_file(org.id, job.id, filename, content)
         job.storage_key = key
+        emit_event(
+            db,
+            "file_uploaded",
+            org_id=org.id,
+            job_id=job.id,
+            metadata={"file_name": filename, "sector": validated_sector},
+        )
         jobs.append(job)
 
     db.commit()

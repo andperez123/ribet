@@ -135,6 +135,19 @@ class OperationalReport(Base):
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ProductEvent(Base):
+    __tablename__ = "product_events"
+    __table_args__ = (Index("ix_product_events_type_created", "event_type", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    org_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ingest_jobs.id"))
+    report_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("operational_reports.id"))
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class BenchmarkCohort(Base):
     __tablename__ = "benchmark_cohorts"
 

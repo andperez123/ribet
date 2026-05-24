@@ -55,8 +55,25 @@ web (Next.js BFF) → api (FastAPI) → Postgres
 | `GET /v1/health/score` | Health score |
 | `GET /v1/health/history` | Trend history |
 | `GET /v1/brief/weekly` | Weekly executive brief |
+| `GET /v1/admin/metrics` | Traction KPIs (admin key) |
 
 See [`docs/openapi.yaml`](docs/openapi.yaml).
+
+## Traction metrics
+
+Internal admin dashboard for VC-ready product KPIs (uploads, reports, activation, engagement):
+
+```
+http://localhost:3000/admin/metrics?key=dev-admin-secret
+```
+
+Set `ADMIN_SECRET` and `ADMIN_API_KEY` in web env; `ADMIN_API_KEY` on the API. See [`docs/railway-deploy.md`](docs/railway-deploy.md) for metric definitions.
+
+## Production (Railway)
+
+Deploy api, worker, web, Postgres, and R2 storage on Railway:
+
+See [`docs/railway-deploy.md`](docs/railway-deploy.md) for the full service layout, env matrix, and deploy steps.
 
 ## Fixtures
 

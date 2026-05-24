@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models import OperationalFinding, OperationalMemory, OperationalReport
+from app.services.events import emit_event
 from app.services.health import build_trend_snapshot, compute_health, get_prior_snapshot
 from app.services.memory import upsert_memory
 from app.services.rules.runner import RuleFinding, run_rules
@@ -95,4 +96,13 @@ def generate_report(
 
     db.commit()
     db.refresh(report)
+    emit_event(
+        db,
+        "report_generated",
+        org_id=org_id,
+        report_id=report.id,
+        job_id=job_ids[0] if job_ids else None,
+        metadata={"health_score": report.health_score, "finding_count": len(findings)},
+    )
+    db.commit()
     return report
