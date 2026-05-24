@@ -26,6 +26,14 @@ def test_health_endpoint(client):
 
 
 def test_health_ready(client):
+    import time
+
+    for _ in range(30):
+        r = client.get("/health/ready")
+        if r.status_code == 200:
+            assert r.json()["database"] == "connected"
+            return
+        time.sleep(0.2)
     r = client.get("/health/ready")
     assert r.status_code == 200
     assert r.json()["database"] == "connected"

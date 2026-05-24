@@ -9,5 +9,5 @@ watchPatterns = ["api/**"]
 
 [deploy]
 healthcheckPath = "/health"
-healthcheckTimeout = 60
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"

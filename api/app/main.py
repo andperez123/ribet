@@ -1,3 +1,6 @@
+import asyncio
+import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,17 +9,23 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import settings
-from app.database import Base, engine
-from app.db_init import wait_for_database
+from app.database import engine
+from app.db_init import get_database_error, initialize_database, is_database_ready
 from app.routers import admin, brief, health, ingest, org, reports
-from app.seed import seed_demo_orgs
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ribet")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    wait_for_database()
-    Base.metadata.create_all(bind=engine)
-    seed_demo_orgs()
+    port = os.environ.get("PORT", "8000")
+    logger.info(
+        "api_starting port=%s database_url_configured=%s",
+        port,
+        bool(os.environ.get("DATABASE_URL")),
+    )
+    asyncio.create_task(asyncio.to_thread(initialize_database))
     yield
 
 
@@ -45,13 +54,24 @@ app.include_router(brief.router)
 
 @app.get("/health")
 def health_check():
-    """Liveness probe — returns 200 when the API process is up."""
+    """Liveness probe — returns 200 as soon as the API process is listening."""
     return {"ok": True}
 
 
 @app.get("/health/ready")
 def health_ready():
-    """Readiness probe — verifies Postgres connectivity."""
+    """Readiness probe — verifies Postgres connectivity and schema init."""
+    if not is_database_ready():
+        err = get_database_error()
+        if err:
+            return JSONResponse(
+                status_code=503,
+                content={"ok": False, "database": err},
+            )
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "database": "initializing"},
+        )
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
