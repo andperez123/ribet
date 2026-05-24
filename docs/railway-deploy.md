@@ -128,12 +128,24 @@ curl -s https://<api-domain>/v1/admin/metrics \
 
 ### Fix: "Failed to build an image" with Railpack at repo root
 
-If Railway shows **Builder: Railpack** and the service name is just `ribet` with no root directory:
+Railway may show **Builder: Railpack** even when a Dockerfile exists. The repo now includes a **root `Dockerfile`** (builds the API) plus `railway.toml` and `railway.json` forcing Docker builds.
 
-1. Open the service → **Settings**
-2. Set **Root Directory** to `api` (for the API service)
-3. Under **Build**, set **Builder** to **Dockerfile** (or redeploy — `api/railway.toml` forces this)
-4. Redeploy
+**Do this in the Railway dashboard:**
+
+1. Open the **ribet** service → **Settings** → **Build**
+2. Change **Builder** from **Railpack** to **Dockerfile**
+3. Set **Dockerfile path** to `Dockerfile` (repo root)
+4. **Redeploy**
+
+If Builder is locked to Railpack, add a service variable:
+
+```
+RAILWAY_DOCKERFILE_PATH=Dockerfile
+```
+
+Then redeploy.
+
+**Alternative (cleaner for monorepo):** set **Root Directory** to `api` and use `api/Dockerfile` instead of the root Dockerfile.
 
 Repeat for a second service (worker, same root `api`) and a third (web, root `web`).
 

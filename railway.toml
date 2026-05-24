@@ -1,10 +1,13 @@
-# Monorepo: Railway needs ONE service per directory. Do NOT deploy from repo root.
-#
-# Create three services, each with Root Directory set in Railway Settings:
-#
-#   api    → Root Directory: api    (uses api/Dockerfile + api/railway.toml)
-#   worker → Root Directory: api    (same image, start: python -m app.worker.process_job)
-#   web    → Root Directory: web    (uses web/Dockerfile + web/railway.toml)
-#
-# Add Postgres plugin; link DATABASE_URL to api + worker.
-# See docs/railway-deploy.md for env vars and R2 setup.
+# Default service config when Railway builds from repo root (API).
+# Worker: duplicate service, Root Directory api/, start python -m app.worker.process_job
+# Web: separate service, Root Directory web/
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+watchPatterns = ["api/**"]
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
