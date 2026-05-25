@@ -81,7 +81,7 @@ No code changes required — storage uses boto3 S3-compatible API.
 | API | `GET /health/ready` | Readiness (includes DB check) |
 | Web | `GET /api/health` | Liveness |
 
-Configure these in Railway service settings for reliable deploys.
+Configure these in Railway service settings for reliable deploys. Do **not** set a healthcheck on **worker** — it only runs `python -m app.worker.process_job` (no uvicorn).
 
 ## Traction metrics dashboard
 
@@ -122,6 +122,8 @@ curl -s https://<api-domain>/v1/admin/metrics \
 2. **Important:** For each service, set **Settings → Root Directory** (`api` or `web`). Deploying from repo root will fail — Railpack cannot detect a single app at the root.
 3. Deploy **api** (Root Directory: `api`, Builder: Dockerfile), verify `GET /health`
 4. Deploy **worker** (Root Directory: `api`, start command: `python -m app.worker.process_job`)
+   - **Healthcheck path:** leave empty (worker has no HTTP server)
+   - Optional: **Config file path** = `railway.worker.toml` (disables healthcheck via config-as-code)
 5. Deploy **web** (Root Directory: `web`, Builder: Dockerfile), set `FASTAPI_URL` to api internal URL
 6. Configure R2 credentials on api + worker
 7. Set `CORS_ORIGINS` to your web public URL

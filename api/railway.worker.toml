@@ -1,0 +1,10 @@
+# Config-as-code for the **worker** service only.
+# Railway → ribet_worker → Settings → Config file path: railway.worker.toml
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = ""
+restartPolicyType = "ON_FAILURE"

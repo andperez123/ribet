@@ -3,6 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-healthcheckPath = "/health"
-healthcheckTimeout = 30
+# No healthcheck here — api and worker share this file (same Root Directory).
+# Worker has no HTTP server; a path here breaks worker deploys.
+# Set Healthcheck path = /health on the **api** service only (Railway UI).
 restartPolicyType = "ON_FAILURE"
