@@ -21,8 +21,10 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY scripts/railway-start.sh ./railway-start.sh
+RUN chmod +x ./railway-start.sh
 
 USER nextjs
-# Railway injects PORT at runtime — do not hardcode it or public routing will miss the process.
+# Railway injects PORT at runtime — must match the public domain target port in Networking.
 ENV HOSTNAME=0.0.0.0
-CMD ["node", "server.js"]
+CMD ["sh", "./railway-start.sh"]

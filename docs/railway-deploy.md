@@ -183,6 +183,12 @@ Without `DATABASE_URL`, the API cannot start (it defaults to `localhost:5432`, w
 
 ## Fix: Web public URL “Application failed to respond”
 
-1. **ribet_web** → **Settings** → **Networking** → edit the public domain port to match what the container listens on (check **Deploy logs** for `Ready on http://0.0.0.0:XXXX` — usually the `PORT` variable Railway sets, often `3000` for Next.js).
-2. Remove a mistaken `PORT=3080` variable on the web service unless you intentionally changed the listen port.
-3. Redeploy after pulling the latest `web/Dockerfile` (no hardcoded `PORT=3000` in the image).
+Railway’s proxy is hitting a different port than Node is listening on (or the service built the wrong app).
+
+**Checklist (in order):**
+
+1. **Root Directory** must be `web` (not repo root). Root root builds the **API** on port 8000; a domain aimed at `3000` will always fail.
+2. **Variables** → `PORT` must match the public domain port. If you see `PORT=3080`, either delete it and redeploy, or set the domain target port to `3080` — they must be identical.
+3. **Networking** → public domain → target port `3000` (typical for Next.js after setting `PORT=3000` in Variables).
+4. **Deploy logs** → look for `ribet-web starting on 0.0.0.0:XXXX` and use that `XXXX` as the domain port.
+5. Redeploy **ribet_web** after fixing the above.
