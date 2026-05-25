@@ -125,6 +125,7 @@ curl -s https://<api-domain>/v1/admin/metrics \
    - **Healthcheck path:** leave empty (worker has no HTTP server)
    - Optional: **Config file path** = `railway.worker.toml` (disables healthcheck via config-as-code)
 5. Deploy **web** (Root Directory: `web`, Builder: Dockerfile), set `FASTAPI_URL` to api internal URL
+   - **Generate domain:** use the port shown under **Networking** after deploy (often Railway’s injected `PORT`, not a guess). If the app listens on `3000`, the public target port must be `3000` — `3080` causes “Application failed to respond”.
 6. Configure R2 credentials on api + worker
 7. Set `CORS_ORIGINS` to your web public URL
 8. Visit `/admin/metrics?key=...` to confirm KPIs
@@ -179,3 +180,9 @@ If deploy fails at **Network › Healthcheck** and the service shows **0 Variabl
 5. **Redeploy**
 
 Without `DATABASE_URL`, the API cannot start (it defaults to `localhost:5432`, which does not exist on Railway).
+
+## Fix: Web public URL “Application failed to respond”
+
+1. **ribet_web** → **Settings** → **Networking** → edit the public domain port to match what the container listens on (check **Deploy logs** for `Ready on http://0.0.0.0:XXXX` — usually the `PORT` variable Railway sets, often `3000` for Next.js).
+2. Remove a mistaken `PORT=3080` variable on the web service unless you intentionally changed the listen port.
+3. Redeploy after pulling the latest `web/Dockerfile` (no hardcoded `PORT=3000` in the image).
