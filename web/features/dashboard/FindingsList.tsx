@@ -55,10 +55,14 @@ export function FindingsList({ findings }: { findings: Finding[] }) {
                 <p className="font-medium text-ribet-text">{f.title}</p>
                 <SeverityBadge severity={f.severity} />
               </div>
-              <p className="mt-1 text-sm text-ribet-muted">{f.detail}</p>
+              <p className="mt-1 text-sm text-ribet-muted">
+                {f.narrative || f.detail}
+              </p>
               <p className="mt-2 text-xs text-ribet-muted">
                 {f.department} · {f.category}
-                {f.suggested_action ? ` · ${f.suggested_action}` : ""}
+                {(f.recommendation || f.suggested_action)
+                  ? ` · ${f.recommendation || f.suggested_action}`
+                  : ""}
               </p>
             </li>
           ))

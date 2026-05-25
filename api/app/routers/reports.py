@@ -1,12 +1,15 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import get_organization, verify_api_key
 from app.models import OperationalFinding, OperationalReport, Organization
-from app.schemas import FindingOut, OperationalReportOut
+from app.schemas import FindingOut, OperationalReportOut, ReportSummary, ReportsListResponse
+from app.services.pdf_export import render_report_pdf
 
 router = APIRouter(prefix="/v1", tags=["reports"])
 
@@ -27,6 +30,40 @@ def _report_to_out(r: OperationalReport) -> OperationalReportOut:
     )
 
 
+@router.get("/reports", response_model=ReportsListResponse)
+def list_reports(
+    org: Organization = Depends(get_organization),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_api_key),
+    limit: int = 20,
+):
+    reports = (
+        db.query(OperationalReport)
+        .filter(OperationalReport.org_id == org.id)
+        .order_by(OperationalReport.generated_at.desc())
+        .limit(limit)
+        .all()
+    )
+    summaries: list[ReportSummary] = []
+    for r in reports:
+        finding_count = (
+            db.query(func.count(OperationalFinding.id))
+            .filter(OperationalFinding.report_id == r.id)
+            .scalar()
+            or 0
+        )
+        summaries.append(
+            ReportSummary(
+                id=r.id,
+                generated_at=r.generated_at.isoformat() if r.generated_at else "",
+                health_score=r.health_score,
+                health_status=r.health_status,
+                finding_count=finding_count,
+            )
+        )
+    return ReportsListResponse(reports=summaries)
+
+
 @router.get("/reports/latest", response_model=OperationalReportOut)
 def get_latest_report(
     org: Organization = Depends(get_organization),
@@ -42,6 +79,23 @@ def get_latest_report(
     if not report:
         raise HTTPException(status_code=404, detail="No reports yet")
     return _report_to_out(report)
+
+
+@router.get("/reports/{report_id}/pdf")
+def get_report_pdf(
+    report_id: UUID,
+    org: Organization = Depends(get_organization),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_api_key),
+):
+    pdf_bytes = render_report_pdf(db, org.id, report_id)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="ribet-report-{report_id}.pdf"'
+        },
+    )
 
 
 @router.get("/reports/{report_id}", response_model=OperationalReportOut)
@@ -83,6 +137,8 @@ def list_findings(
             department=f.department,
             category=f.category,
             suggested_action=f.suggested_action,
+            narrative=f.narrative,
+            recommendation=f.recommendation,
             detected_at=f.detected_at.isoformat() if f.detected_at else "",
         )
         for f in rows

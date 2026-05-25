@@ -5,7 +5,8 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import Customer, GlTransaction, InventoryItem, Invoice, Vendor
+from app.models import Customer, GlTransaction, InventoryItem, Invoice, OperationalSnapshot, Vendor
+from app.services.transforms.snapshot import get_prior_snapshot
 
 
 @dataclass
@@ -52,6 +53,83 @@ def run_rules(db: Session, org_id: UUID) -> list[RuleFinding]:
     findings.extend(_check_invalid_aging_buckets(db, org_id))
     findings.extend(_check_duplicate_vendors(db, org_id))
     return findings
+
+
+def run_snapshot_delta_rules(db: Session, org_id: UUID) -> list[RuleFinding]:
+    return _check_snapshot_deltas(db, org_id)
+
+
+def _check_snapshot_deltas(db: Session, org_id: UUID) -> list[RuleFinding]:
+    current = (
+        db.query(OperationalSnapshot)
+        .filter(OperationalSnapshot.org_id == org_id)
+        .order_by(OperationalSnapshot.computed_at.desc())
+        .first()
+    )
+    if not current:
+        return []
+    prior = get_prior_snapshot(db, org_id, exclude_period=current.period)
+    if not prior:
+        return []
+
+    results: list[RuleFinding] = []
+    if (
+        current.ar_over_90_pct is not None
+        and prior.ar_over_90_pct is not None
+        and current.ar_over_90_pct - prior.ar_over_90_pct >= 5
+    ):
+        results.append(
+            RuleFinding(
+                finding_type="ar_aging_worsened",
+                title="AR over 90 days increased vs prior period",
+                detail=(
+                    f"AR over 90 rose from {prior.ar_over_90_pct:.1f}% to "
+                    f"{current.ar_over_90_pct:.1f}% of total receivables."
+                ),
+                severity="high",
+                confidence=0.9,
+                business_impact="cash_flow",
+                department="finance",
+                category="financial",
+                suggested_action="Review collection workflow and top overdue accounts.",
+            )
+        )
+    if current.health_score and prior.health_score and prior.health_score - current.health_score >= 10:
+        results.append(
+            RuleFinding(
+                finding_type="health_score_declined",
+                title="Operational health score declined",
+                detail=f"Health score dropped from {prior.health_score} to {current.health_score}.",
+                severity="medium",
+                confidence=0.88,
+                business_impact="cash_flow",
+                department="finance",
+                category="risk",
+                suggested_action="Review latest findings and address high-severity items.",
+            )
+        )
+    if (
+        current.vendor_concentration is not None
+        and prior.vendor_concentration is not None
+        and current.vendor_concentration - prior.vendor_concentration >= 10
+    ):
+        results.append(
+            RuleFinding(
+                finding_type="vendor_concentration_increased",
+                title="Vendor concentration increased",
+                detail=(
+                    f"Top vendor AP share rose from {prior.vendor_concentration:.1f}% "
+                    f"to {current.vendor_concentration:.1f}%."
+                ),
+                severity="medium",
+                confidence=0.85,
+                business_impact="cash_flow",
+                department="purchasing",
+                category="risk",
+                suggested_action="Review vendor dependency and payment terms.",
+            )
+        )
+    return results
 
 
 def _check_ar_aging_spike(db: Session, org_id: UUID) -> list[RuleFinding]:

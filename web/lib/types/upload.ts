@@ -23,7 +23,11 @@ export type UploadFileMeta = {
 };
 
 export interface UploadClient {
-  upload(files: File[], sector: UploadSector): Promise<UploadFileMeta[]>;
+  upload(
+    files: File[],
+    sector: UploadSector,
+    consentAcknowledged?: boolean
+  ): Promise<UploadFileMeta[]>;
 }
 
 export type UploadJob = {

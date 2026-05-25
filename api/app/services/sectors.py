@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Business sectors, capability unlock rules, and report-type hints."""
 
 from typing import Literal
@@ -5,6 +7,10 @@ from typing import Literal
 Sector = Literal["financials", "manufacturing", "orders", "sales"]
 
 SECTORS: tuple[str, ...] = ("financials", "manufacturing", "orders", "sales")
+
+ACTIVE_SECTORS: tuple[str, ...] = ("financials", "manufacturing")
+
+COMING_SOON_SECTORS: tuple[str, ...] = ("orders", "sales")
 
 REPORT_TYPE_TO_SECTOR: dict[str, str] = {
     "ar_aging": "financials",
@@ -65,6 +71,11 @@ def validate_sector(sector: str | None) -> str | None:
         return None
     if sector not in SECTORS:
         raise ValueError(f"Invalid sector: {sector}. Must be one of: {', '.join(SECTORS)}")
+    if sector in COMING_SOON_SECTORS:
+        raise ValueError(
+            f"Sector '{sector}' is not enabled yet (coming soon). "
+            f"Active sectors: {', '.join(ACTIVE_SECTORS)}"
+        )
     return sector
 
 

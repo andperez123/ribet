@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -30,13 +32,24 @@ def _job_to_schema(job: IngestJob) -> UploadJob:
 async def upload_files(
     files: list[UploadFile] = File(...),
     sector: str | None = Form(None),
+    consent_acknowledged: str = Form("false"),
     org: Organization = Depends(get_organization),
     db: Session = Depends(get_db),
     _: None = Depends(verify_api_key),
 ):
+    if consent_acknowledged.lower() not in ("true", "1", "on", "yes"):
+        raise HTTPException(
+            status_code=400,
+            detail="Upload consent required",
+        )
     try:
         jobs = await create_upload_jobs(
-            db, org, files, settings.max_upload_bytes, sector=sector
+            db,
+            org,
+            files,
+            settings.max_upload_bytes,
+            sector=sector,
+            consent_acknowledged=True,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

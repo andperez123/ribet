@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   const res = await fetch(`${getFastApiBase()}/v1/ingest/uploads`, {
     method: "POST",
-    headers: getProxyHeaders(),
+    headers: await getProxyHeaders(),
     body: upstream,
   });
 

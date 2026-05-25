@@ -1,11 +1,21 @@
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const ADMIN_COOKIE = "ribet-admin";
 
-export function middleware(request: NextRequest) {
+const isProtectedRoute = createRouteMatcher(["/dashboard(.*)"]);
+const isPublicRoute = createRouteMatcher([
+  "/",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/legal(.*)",
+  "/api(.*)",
+]);
+
+function adminGuard(request: NextRequest): NextResponse | null {
   if (!request.nextUrl.pathname.startsWith("/admin")) {
-    return NextResponse.next();
+    return null;
   }
 
   const secret = process.env.ADMIN_SECRET;
@@ -37,6 +47,30 @@ export function middleware(request: NextRequest) {
   });
 }
 
+const clerkEnabled = Boolean(
+  process.env.CLERK_SECRET_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+);
+
+export default clerkEnabled
+  ? clerkMiddleware(async (auth, request) => {
+      const admin = adminGuard(request);
+      if (admin) return admin;
+
+      if (isPublicRoute(request)) {
+        return;
+      }
+      if (isProtectedRoute(request)) {
+        await auth.protect();
+      }
+    })
+  : function middleware(request: NextRequest) {
+      const admin = adminGuard(request);
+      return admin ?? NextResponse.next();
+    };
+
 export const config = {
-  matcher: "/admin/:path*",
+  matcher: [
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/(api|trpc)(.*)",
+  ],
 };

@@ -1,14 +1,18 @@
 import Link from "next/link";
+import { DemoBanner } from "@/components/layout/DemoBanner";
 import { Logo } from "@/components/ui/Logo";
 
 const nav = [
   { href: "/dashboard", label: "Overview" },
+  { href: "/dashboard/reports", label: "Reports" },
+  { href: "/dashboard/settings", label: "Settings" },
   { href: "/#upload", label: "Upload files" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-ribet-bg">
+      <DemoBanner />
       <header className="sticky top-0 z-50 border-b border-ribet-border/60 bg-ribet-bg/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 md:h-20 md:px-10">
           <Logo href="/dashboard" />

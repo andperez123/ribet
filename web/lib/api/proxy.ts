@@ -5,7 +5,7 @@ export async function proxyGet(path: string, search?: URLSearchParams) {
   const qs = search?.toString();
   const url = `${getFastApiBase()}${path}${qs ? `?${qs}` : ""}`;
   const res = await fetch(url, {
-    headers: getProxyHeaders(),
+    headers: await getProxyHeaders(),
     cache: "no-store",
   });
   const body = await res.text();

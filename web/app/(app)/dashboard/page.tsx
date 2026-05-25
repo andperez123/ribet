@@ -6,19 +6,35 @@ import { HealthComponentsGrid } from "@/features/dashboard/HealthComponentsGrid"
 import { HealthScoreHero } from "@/features/dashboard/HealthScoreHero";
 import { HealthTrend } from "@/features/dashboard/HealthTrend";
 import { SectorProgressPanel } from "@/features/dashboard/SectorProgressPanel";
+import { SnapshotKpiGrid } from "@/features/dashboard/SnapshotKpiGrid";
 import { UploadsTable } from "@/features/dashboard/UploadsTable";
 import { serverData } from "@/lib/api/server-data";
 
 export default async function DashboardPage() {
-  const [report, findings, healthScore, healthHistory, jobs, progress] =
-    await Promise.all([
-      serverData.latestReport(),
-      serverData.findings(20),
-      serverData.healthScore(),
-      serverData.healthHistory(12),
-      serverData.ingestJobs(20),
-      serverData.orgProgress(),
-    ]);
+  const [
+    report,
+    findings,
+    healthScore,
+    healthHistory,
+    jobs,
+    progress,
+    snapshotLatest,
+    snapshotHistory,
+  ] = await Promise.all([
+    serverData.latestReport(),
+    serverData.findings(20),
+    serverData.healthScore(),
+    serverData.healthHistory(12),
+    serverData.ingestJobs(20),
+    serverData.orgProgress(),
+    serverData.snapshotsLatest(),
+    serverData.snapshotsHistory(12),
+  ]);
+
+  const priorSnapshot =
+    snapshotHistory?.snapshots.find(
+      (s) => s.period !== snapshotLatest?.period
+    ) ?? null;
 
   return (
     <div className="space-y-8">
@@ -31,14 +47,22 @@ export default async function DashboardPage() {
             Operational health and findings from your latest data.
           </p>
         </div>
-        {report && (
+        <div className="flex flex-wrap gap-3">
+          {report && (
+            <Link
+              href={`/dashboard/reports/${report.id}`}
+              className="rounded-full bg-ribet-green px-5 py-2.5 text-sm font-medium text-ribet-text hover:opacity-90"
+            >
+              View full report
+            </Link>
+          )}
           <Link
-            href={`/dashboard/reports/${report.id}`}
-            className="rounded-full bg-ribet-green px-5 py-2.5 text-sm font-medium text-ribet-text hover:opacity-90"
+            href="/dashboard/reports"
+            className="rounded-full border border-ribet-border px-5 py-2.5 text-sm font-medium text-ribet-text hover:bg-ribet-card"
           >
-            View full report
+            All reports
           </Link>
-        )}
+        </div>
       </div>
 
       {!report ? (
@@ -54,6 +78,18 @@ export default async function DashboardPage() {
           {healthScore && <HealthComponentsGrid score={healthScore} />}
           <ExecutiveSummaryCards report={report} />
         </>
+      )}
+
+      {snapshotLatest && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-ribet-text">
+            Operational snapshot
+          </h2>
+          <SnapshotKpiGrid
+            current={snapshotLatest}
+            prior={priorSnapshot}
+          />
+        </section>
       )}
 
       {healthHistory && healthHistory.snapshots.length > 1 && (

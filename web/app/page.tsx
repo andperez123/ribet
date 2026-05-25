@@ -4,7 +4,6 @@ import { Hero } from "@/components/sections/Hero";
 import { TrustBar } from "@/components/sections/TrustBar";
 import { UploadSection } from "@/components/sections/UploadSection";
 import { WhatRibetDoes } from "@/components/sections/WhatRibetDoes";
-import { ProductPreview } from "@/components/sections/ProductPreview";
 import { HowItWorks } from "@/components/sections/HowItWorks";
 import { FinalCta } from "@/components/sections/FinalCta";
 
@@ -17,7 +16,6 @@ export default function HomePage() {
         <UploadSection />
         <WhatRibetDoes />
         <TrustBar />
-        <ProductPreview />
         <HowItWorks />
         <FinalCta />
       </main>

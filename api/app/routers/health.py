@@ -11,9 +11,9 @@ router = APIRouter(prefix="/v1/health", tags=["health"])
 
 @router.get("/score", response_model=HealthScore)
 def get_health_score(
+    _: None = Depends(verify_api_key),
     org: Organization = Depends(get_organization),
     db: Session = Depends(get_db),
-    _: None = Depends(verify_api_key),
 ):
     snap = (
         db.query(HealthSnapshot)
@@ -33,9 +33,9 @@ def get_health_score(
 
 @router.get("/history", response_model=HealthHistory)
 def get_health_history(
+    _: None = Depends(verify_api_key),
     org: Organization = Depends(get_organization),
     db: Session = Depends(get_db),
-    _: None = Depends(verify_api_key),
     limit: int = 12,
 ):
     snaps = (

@@ -4,6 +4,7 @@ import { AlertBubble } from "@/components/ui/AlertBubble";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { FrogHero } from "@/components/ui/FrogHero";
+import { TryDemoButton } from "@/features/demo/TryDemoButton";
 
 export function Hero() {
   return (
@@ -14,15 +15,17 @@ export function Hero() {
             <h1 className="text-3xl font-semibold leading-snug tracking-tight text-ribet-text md:text-4xl lg:text-[2.75rem]">
               {hero.headline[0]}
               <br />
-              {hero.headline[1]}{" "}
+              {hero.headline[1]}
+              <br />
               <span className="text-ribet-green">{hero.highlightWord}</span>
             </h1>
             <p className="mt-5 whitespace-pre-line text-base leading-relaxed text-ribet-muted md:text-lg">
               {hero.subheadline}
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-4">
-              <Button href="#upload">
-                {hero.primaryCta}
+              <TryDemoButton />
+              <Button href="#upload" variant="secondary">
+                Upload files
                 <ArrowRight className="h-4 w-4" />
               </Button>
               <Button href="/dashboard" variant="secondary">

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import mimetypes
 from uuid import UUID
 
@@ -9,7 +11,7 @@ from app.services.events import emit_event
 from app.services.sectors import validate_sector
 from app.services.storage import upload_file
 
-ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".pdf"}
+ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
 
 
 def validate_file(filename: str, content: bytes, max_bytes: int) -> None:
@@ -26,6 +28,7 @@ async def create_upload_jobs(
     files: list[UploadFile],
     max_bytes: int,
     sector: str | None = None,
+    consent_acknowledged: bool = False,
 ) -> list[IngestJob]:
     validated_sector = validate_sector(sector)
     jobs: list[IngestJob] = []
@@ -42,6 +45,7 @@ async def create_upload_jobs(
             status="pending",
             errors=[],
             sector=validated_sector,
+            consent_acknowledged=consent_acknowledged,
         )
         db.add(job)
         db.flush()

@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import logging
 import time
+from pathlib import Path
 
 from sqlalchemy import text
 
+from app.config import settings
 from app.database import Base, engine
 from app.seed import seed_demo_orgs
 
@@ -45,13 +49,28 @@ def wait_for_database(max_attempts: int = 60, delay_seconds: float = 2.0) -> Non
     ) from last_error
 
 
+def _run_migrations() -> None:
+    try:
+        from alembic import command
+        from alembic.config import Config
+
+        ini = Path(__file__).resolve().parent.parent / "alembic.ini"
+        cfg = Config(str(ini))
+        command.upgrade(cfg, "head")
+        logger.info("alembic_upgrade_complete")
+    except Exception as exc:
+        logger.warning("alembic_upgrade_failed fallback=create_all error=%s", exc)
+        Base.metadata.create_all(bind=engine)
+
+
 def initialize_database() -> None:
     """Run in a background thread so /health responds while Postgres warms up."""
     global _db_ready, _db_error
     try:
         wait_for_database()
-        Base.metadata.create_all(bind=engine)
-        seed_demo_orgs()
+        _run_migrations()
+        if settings.ribet_env in ("local", "test"):
+            seed_demo_orgs()
         _db_ready = True
         logger.info("database_initialized")
     except Exception as exc:

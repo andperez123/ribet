@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -7,7 +9,14 @@ from app.models import OperationalFinding, OperationalMemory, OperationalReport
 from app.services.events import emit_event
 from app.services.health import build_trend_snapshot, compute_health, get_prior_snapshot
 from app.services.memory import upsert_memory
-from app.services.rules.runner import RuleFinding, run_rules
+from app.models import Organization
+from app.services.narrator import narrate_findings_batch
+from app.services.rules.runner import RuleFinding, run_rules, run_snapshot_delta_rules
+from app.services.transforms.snapshot import (
+    build_operational_snapshot,
+    get_prior_snapshot as get_prior_op_snapshot,
+    snapshot_delta_strings,
+)
 
 
 def persist_findings(
@@ -16,8 +25,11 @@ def persist_findings(
     job_id: UUID,
     report_id: UUID,
     findings: list[RuleFinding],
+    narratives: dict[str, dict[str, str]] | None = None,
 ) -> None:
+    narratives = narratives or {}
     for f in findings:
+        extra = narratives.get(f.fingerprint, {})
         db.add(
             OperationalFinding(
                 org_id=org_id,
@@ -32,7 +44,9 @@ def persist_findings(
                 department=f.department,
                 category=f.category,
                 fingerprint=f.fingerprint,
-                suggested_action=f.suggested_action,
+                suggested_action=extra.get("recommendation") or f.suggested_action,
+                narrative=extra.get("narrative"),
+                recommendation=extra.get("recommendation"),
             )
         )
 
@@ -41,17 +55,38 @@ def generate_report(
     db: Session,
     org_id: UUID,
     job_ids: list[UUID],
+    period: str | None = None,
 ) -> OperationalReport:
     findings = run_rules(db, org_id)
-    upsert_memory(db, org_id, findings)
 
-    report = OperationalReport(org_id=org_id, job_ids=job_ids)
+    org = db.get(Organization, org_id)
+    org_name = org.name if org else "Organization"
+
+    report = OperationalReport(
+        org_id=org_id, job_ids=[str(j) for j in job_ids]
+    )
     db.add(report)
     db.flush()
 
-    snapshot = compute_health(db, org_id, findings, report.id)
-    prior = get_prior_snapshot(db, org_id, exclude_id=snapshot.id)
-    trends = build_trend_snapshot(snapshot, prior, findings)
+    health_snap = compute_health(db, org_id, findings, report.id)
+    prior_health = get_prior_snapshot(db, org_id, exclude_id=health_snap.id)
+    trends = build_trend_snapshot(health_snap, prior_health, findings)
+
+    period_label = period or datetime.now(timezone.utc).strftime("%Y-%m")
+    prior_op = get_prior_op_snapshot(db, org_id, exclude_period=period_label)
+    op_snap = build_operational_snapshot(
+        db,
+        org_id,
+        period_label,
+        job_ids[0] if job_ids else org_id,
+        health_snap.score,
+        health_snap.status,
+    )
+    findings.extend(run_snapshot_delta_rules(db, org_id))
+    upsert_memory(db, org_id, findings)
+    trends = list(trends) + snapshot_delta_strings(op_snap, prior_op)
+
+    narratives = narrate_findings_batch(findings, org_name, op_snap, prior_op)
 
     financial = [f.to_dict() for f in findings if f.category == "financial"]
     operational = [f.to_dict() for f in findings if f.category == "operational"]
@@ -88,11 +123,11 @@ def generate_report(
     report.risk_areas = risk
     report.suggested_actions = actions
     report.trend_snapshot = trends
-    report.health_score = snapshot.score
-    report.health_status = snapshot.status
+    report.health_score = health_snap.score
+    report.health_status = health_snap.status
 
     if job_ids:
-        persist_findings(db, org_id, job_ids[0], report.id, findings)
+        persist_findings(db, org_id, job_ids[0], report.id, findings, narratives)
 
     db.commit()
     db.refresh(report)

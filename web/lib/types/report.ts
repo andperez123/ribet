@@ -38,6 +38,8 @@ export type Finding = {
   department: string;
   category: string;
   suggested_action: string | null;
+  narrative?: string | null;
+  recommendation?: string | null;
   detected_at: string;
 };
 
@@ -71,4 +73,16 @@ export type IngestJobRecord = {
 
 export type IngestJobsResponse = {
   jobs: IngestJobRecord[];
+};
+
+export type ReportListItem = {
+  id: string;
+  generated_at: string;
+  health_score: number;
+  health_status: string;
+  finding_count: number;
+};
+
+export type ReportsListResponse = {
+  reports: ReportListItem[];
 };

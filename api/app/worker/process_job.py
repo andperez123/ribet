@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Background worker — polls ingest_jobs and runs ETL + rules + report."""
 
 import logging
@@ -8,7 +10,7 @@ from sqlalchemy import text
 
 from app.database import SessionLocal
 from app.models import IngestJob, Organization
-from app.services.etl.pipeline import run_etl
+from app.services.transforms.pipeline import transform_upload
 from app.services.events import emit_event
 from app.services.progress import recompute_org_progress
 from app.services.report import generate_report
@@ -72,40 +74,23 @@ def process_job(db, job: IngestJob) -> None:
         return
 
     try:
-        if job.file_name.lower().endswith(".pdf"):
-            job.report_type = "pdf"
-            job.status = "done"
-            job.updated_at = datetime.now(timezone.utc)
-            db.commit()
-            recompute_org_progress(db, org.id)
-            logger.info(
-                "job_done org_id=%s job_id=%s report_type=pdf report_id=",
-                org.id,
-                job.id,
+        if job.sector in ("orders", "sales"):
+            _fail_job(
+                db,
+                job,
+                f"Sector '{job.sector}' is not enabled yet. Upload financials or manufacturing exports.",
             )
             return
 
-        report_type, row_count = run_etl(db, org, job.id, job.file_name, job.storage_key)
-        job.report_type = report_type
+        result = transform_upload(db, org, job.id, job.file_name, job.storage_key)
+        job.report_type = result.report_type
         db.commit()
 
-        if row_count == 0 and report_type == "unknown":
-            if job.sector in ("orders", "sales"):
-                job.status = "done"
-                job.updated_at = datetime.now(timezone.utc)
-                db.commit()
-                recompute_org_progress(db, org.id)
-                logger.info(
-                    "job_done org_id=%s job_id=%s report_type=unknown sector=%s",
-                    org.id,
-                    job.id,
-                    job.sector,
-                )
-                return
+        if result.row_count == 0 and result.report_type == "unknown":
             _fail_job(db, job, "Could not detect report type or parse file")
             return
 
-        report = generate_report(db, org.id, [job.id])
+        report = generate_report(db, org.id, [job.id], period=result.period)
         job.report_id = report.id
         job.status = "done"
         job.updated_at = datetime.now(timezone.utc)
@@ -117,20 +102,52 @@ def process_job(db, job: IngestJob) -> None:
             org.id,
             job.id,
             report.id,
-            report_type,
+            result.report_type,
         )
     except Exception as e:
         _fail_job(db, job, str(e))
 
 
-def run_worker():
-    from app.database import Base, engine
+def _start_email_scheduler():
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
 
-    Base.metadata.create_all(bind=engine)
+        from app.database import SessionLocal
+        from app.services.email import send_briefs_for_active_orgs
+
+        def _job():
+            db = SessionLocal()
+            try:
+                send_briefs_for_active_orgs(db)
+            finally:
+                db.close()
+
+        sched = BackgroundScheduler()
+        sched.add_job(_job, "cron", day_of_week="mon", hour=8, minute=0)
+        sched.start()
+        logger.info("email_scheduler_started")
+    except Exception as e:
+        logger.warning("email_scheduler_failed error=%s", e)
+
+
+def run_worker():
     logger.info("worker_started")
+    _start_email_scheduler()
+    last_purge = 0.0
     while True:
         db = SessionLocal()
         try:
+            import time as _time
+
+            now = _time.time()
+            if now - last_purge > 3600:
+                from app.services.demo import purge_old_demo_orgs
+
+                n = purge_old_demo_orgs(db)
+                if n:
+                    logger.info("demo_orgs_purged count=%s", n)
+                last_purge = now
+
             job = claim_job(db)
             if job:
                 logger.info(

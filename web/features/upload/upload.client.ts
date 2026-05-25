@@ -46,9 +46,14 @@ export class MockUploadClient implements UploadClient {
 
 /** Calls Next.js BFF → FastAPI */
 export class ApiUploadClient implements UploadClient {
-  async upload(files: File[], sector: UploadSector): Promise<UploadFileMeta[]> {
+  async upload(
+    files: File[],
+    sector: UploadSector,
+    consentAcknowledged = false
+  ): Promise<UploadFileMeta[]> {
     const form = new FormData();
     form.append("sector", sector);
+    form.append("consent_acknowledged", consentAcknowledged ? "true" : "false");
     files.forEach((f) => form.append("files", f));
 
     const res = await fetch(BFF.ingest.uploads, {

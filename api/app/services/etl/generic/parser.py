@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 """Generic fallback parser using column aliases."""
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 import pandas as pd
@@ -7,6 +10,15 @@ from sqlalchemy.orm import Session
 
 from app.models import Customer, GlTransaction, InventoryItem, Invoice, Vendor
 from app.services.etl.aliases import normalize_columns, rename_dataframe
+
+
+def _period_from_df(df: pd.DataFrame, fallback: str | None = None) -> str:
+    for col in ("posting_date", "due_date", "posted_at"):
+        if col in df.columns:
+            dates = pd.to_datetime(df[col], errors="coerce").dropna()
+            if len(dates):
+                return dates.max().strftime("%Y-%m")
+    return fallback or datetime.now(timezone.utc).strftime("%Y-%m")
 
 
 def _safe_str(val) -> str:
@@ -27,6 +39,10 @@ def _safe_float(val) -> float:
 def parse_ar_aging(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) -> int:
     col_map = normalize_columns(list(df.columns))
     df = rename_dataframe(df, col_map)
+    period = _period_from_df(df)
+    db.query(Invoice).filter(
+        Invoice.org_id == org_id, Invoice.period_label == period
+    ).delete(synchronize_session=False)
     count = 0
     customers_seen: set[str] = set()
 
@@ -35,14 +51,24 @@ def parse_ar_aging(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) ->
         if not cust_id:
             continue
         if cust_id not in customers_seen:
-            db.add(
-                Customer(
-                    org_id=org_id,
-                    customer_id=cust_id,
-                    name=_safe_str(row.get("customer_name", cust_id)),
-                    source_job_id=job_id,
-                )
+            existing = (
+                db.query(Customer)
+                .filter(Customer.org_id == org_id, Customer.customer_id == cust_id)
+                .first()
             )
+            name = _safe_str(row.get("customer_name", cust_id))
+            if existing:
+                existing.name = name
+                existing.source_job_id = job_id
+            else:
+                db.add(
+                    Customer(
+                        org_id=org_id,
+                        customer_id=cust_id,
+                        name=name,
+                        source_job_id=job_id,
+                    )
+                )
             customers_seen.add(cust_id)
         inv_id = _safe_str(row.get("invoice_id", f"{cust_id}-{count}"))
         db.add(
@@ -54,6 +80,7 @@ def parse_ar_aging(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) ->
                 due_date=_safe_str(row.get("due_date", "")),
                 days_overdue=int(_safe_float(row.get("days_overdue", 0))),
                 aging_bucket=_safe_str(row.get("aging_bucket", "")),
+                period_label=period,
                 source_job_id=job_id,
             )
         )
@@ -64,6 +91,10 @@ def parse_ar_aging(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) ->
 def parse_ap_aging(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) -> int:
     col_map = normalize_columns(list(df.columns))
     df = rename_dataframe(df, col_map)
+    period = _period_from_df(df)
+    db.query(Vendor).filter(
+        Vendor.org_id == org_id, Vendor.period_label == period
+    ).delete(synchronize_session=False)
     count = 0
     for _, row in df.iterrows():
         vid = _safe_str(row.get("vendor_id", row.get("vendor_name", "")))
@@ -75,6 +106,7 @@ def parse_ap_aging(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) ->
                 vendor_id=vid,
                 name=_safe_str(row.get("vendor_name", vid)),
                 balance=_safe_float(row.get("amount", 0)),
+                period_label=period,
                 source_job_id=job_id,
             )
         )
@@ -85,6 +117,10 @@ def parse_ap_aging(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) ->
 def parse_gl_detail(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) -> int:
     col_map = normalize_columns(list(df.columns))
     df = rename_dataframe(df, col_map)
+    period = _period_from_df(df)
+    db.query(GlTransaction).filter(
+        GlTransaction.org_id == org_id, GlTransaction.period_label == period
+    ).delete(synchronize_session=False)
     count = 0
     for i, row in df.iterrows():
         acct = _safe_str(row.get("account_id", ""))
@@ -98,6 +134,7 @@ def parse_gl_detail(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) -
                 account_name=_safe_str(row.get("account_name", "")),
                 amount=_safe_float(row.get("amount", 0)),
                 posted_at=_safe_str(row.get("posted_at", "")),
+                period_label=period,
                 source_job_id=job_id,
             )
         )
@@ -108,6 +145,10 @@ def parse_gl_detail(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) -
 def parse_inventory(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) -> int:
     col_map = normalize_columns(list(df.columns))
     df = rename_dataframe(df, col_map)
+    period = _period_from_df(df)
+    db.query(InventoryItem).filter(
+        InventoryItem.org_id == org_id, InventoryItem.period_label == period
+    ).delete(synchronize_session=False)
     count = 0
     for i, row in df.iterrows():
         sku = _safe_str(row.get("sku", row.get("item_id", f"item-{i}")))
@@ -120,6 +161,7 @@ def parse_inventory(db: Session, org_id: UUID, job_id: UUID, df: pd.DataFrame) -
                 sku=sku,
                 quantity=_safe_float(row.get("quantity", 0)),
                 gl_account=_safe_str(row.get("gl_account", "")),
+                period_label=period,
                 source_job_id=job_id,
             )
         )

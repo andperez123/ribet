@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     storage_backend: str = "s3"
     max_upload_bytes: int = 50 * 1024 * 1024
+    ribet_env: str = "local"
+    ribet_app_url: str = "http://localhost:3000"
+    resend_api_key: str = ""
+    resend_from: str = "Ribet <reports@ribet.local>"
+    default_brief_recipient: str = ""
+    openai_api_key: str = ""
+    ribet_narration: str = "off"
 
     @property
     def cors_origin_list(self) -> list[str]:

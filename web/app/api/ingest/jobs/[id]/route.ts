@@ -7,7 +7,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
 
   const res = await fetch(`${getFastApiBase()}/v1/ingest/jobs/${id}`, {
-    headers: getProxyHeaders(),
+    headers: await getProxyHeaders(),
   });
 
   const body = await res.text();

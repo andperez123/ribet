@@ -42,7 +42,7 @@ def test_upload_persists_sector(client):
     _ensure_org(SessionLocal())
     content = (FIXTURES / "ar_aging_jobboss.csv").read_bytes()
     files = {"files": ("ar_aging_jobboss.csv", io.BytesIO(content), "text/csv")}
-    data = {"sector": "financials"}
+    data = {"sector": "financials", "consent_acknowledged": "true"}
 
     r = client.post("/v1/ingest/uploads", headers=HEADERS, files=files, data=data)
     assert r.status_code == 200
@@ -57,7 +57,7 @@ def test_invalid_sector_rejected(client):
     _ensure_org(SessionLocal())
     content = b"a,b\n1,2\n"
     files = {"files": ("bad.csv", io.BytesIO(content), "text/csv")}
-    data = {"sector": "invalid_sector"}
+    data = {"sector": "invalid_sector", "consent_acknowledged": "true"}
 
     r = client.post("/v1/ingest/uploads", headers=HEADERS, files=files, data=data)
     assert r.status_code == 400
@@ -77,24 +77,25 @@ def test_financials_unlocks_cash_flow_logistics():
         db.close()
 
 
-def test_all_sectors_unlocks_full_map():
+def test_active_sectors_unlock_core_capabilities():
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
         _ensure_org(db)
-        for sector in ("financials", "manufacturing", "orders", "sales"):
+        for sector in ("financials", "manufacturing"):
             _done_job(db, sector, f"{sector}.csv")
+        recompute_org_progress(db, DEMO_ORG_ID)
         data = get_org_progress(db, DEMO_ORG_ID)
         unlocked = {c["id"] for c in data["capabilities"] if c["unlocked"]}
-        assert "full_operational_map" in unlocked
-        assert "cross_sector_insights" in unlocked
-        assert data["coverage_count"] == 4
+        assert "cash_flow_logistics" in unlocked
+        assert "inventory_logistics" in unlocked
+        assert data["coverage_count"] == 2
     finally:
         db.close()
 
 
-def test_orders_unknown_file_completes():
+def test_orders_sector_fails_as_coming_soon():
     from app.database import SessionLocal
 
     db = SessionLocal()
@@ -116,11 +117,7 @@ def test_orders_unknown_file_completes():
 
         process_job(db, job)
         db.refresh(job)
-        assert job.status == "done"
-        assert job.report_id is None
-
-        progress = get_org_progress(db, DEMO_ORG_ID)
-        orders = next(s for s in progress["sectors"] if s["id"] == "orders")
-        assert orders["covered"] is True
+        assert job.status == "error"
+        assert job.errors and "not enabled" in job.errors[0].lower()
     finally:
         db.close()

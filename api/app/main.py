@@ -11,7 +11,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import engine
 from app.db_init import get_database_error, initialize_database, is_database_ready
-from app.routers import admin, brief, health, ingest, org, reports
+from app.routers import admin, brief, health, ingest, org, reports, snapshots
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ribet")
@@ -25,7 +25,10 @@ async def lifespan(app: FastAPI):
         port,
         bool(os.environ.get("DATABASE_URL")),
     )
-    asyncio.create_task(asyncio.to_thread(initialize_database))
+    if os.environ.get("RIBET_SKIP_BACKGROUND_DB") == "1":
+        initialize_database()
+    else:
+        asyncio.create_task(asyncio.to_thread(initialize_database))
     yield
 
 
@@ -50,6 +53,7 @@ app.include_router(org.router)
 app.include_router(health.router)
 app.include_router(reports.router)
 app.include_router(brief.router)
+app.include_router(snapshots.router)
 
 
 @app.get("/health")

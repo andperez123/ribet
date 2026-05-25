@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Org sector coverage and capability unlock tracking."""
 
 from datetime import datetime, timezone

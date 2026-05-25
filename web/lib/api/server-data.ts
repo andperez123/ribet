@@ -11,7 +11,7 @@ import type {
 
 async function fetchApi<T>(path: string): Promise<T | null> {
   const res = await fetch(`${getFastApiBase()}${path}`, {
-    headers: getProxyHeaders(),
+    headers: await getProxyHeaders(),
     cache: "no-store",
   });
   if (res.status === 404) return null;
@@ -24,6 +24,10 @@ async function fetchApi<T>(path: string): Promise<T | null> {
 export const serverData = {
   latestReport: () => fetchApi<OperationalReport>("/v1/reports/latest"),
   report: (id: string) => fetchApi<OperationalReport>(`/v1/reports/${id}`),
+  reports: (limit = 20) =>
+    fetchApi<import("@/lib/types/report").ReportsListResponse>(
+      `/v1/reports?limit=${limit}`
+    ),
   findings: (limit = 50) =>
     fetchApi<Finding[]>(`/v1/findings?limit=${limit}`),
   healthScore: () => fetchApi<HealthScore>("/v1/health/score"),
@@ -33,4 +37,12 @@ export const serverData = {
     fetchApi<IngestJobsResponse>(`/v1/ingest/jobs?limit=${limit}`),
   weeklyBrief: () => fetchApi<WeeklyBrief>("/v1/brief/weekly"),
   orgProgress: () => fetchApi<OrgProgress>("/v1/org/progress"),
+  snapshotsLatest: () =>
+    fetchApi<import("@/lib/types/snapshot").OperationalSnapshotOut>(
+      "/v1/snapshots/latest"
+    ),
+  snapshotsHistory: (limit = 12) =>
+    fetchApi<import("@/lib/types/snapshot").SnapshotHistoryOut>(
+      `/v1/snapshots/history?limit=${limit}`
+    ),
 };

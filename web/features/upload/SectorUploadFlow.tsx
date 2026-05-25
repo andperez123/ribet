@@ -32,6 +32,7 @@ export function SectorUploadFlow() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [activeSector, setActiveSector] = useState<SectorId>(DEFAULT_SECTOR);
   const [isDragging, setIsDragging] = useState(false);
+  const [consent, setConsent] = useState(false);
   const { files, upload, isUploading, error, clear, lastReportId } = useUpload();
 
   const activeDef = SECTORS.find((s) => s.id === activeSector)!;
@@ -39,9 +40,14 @@ export function SectorUploadFlow() {
   const handleFiles = useCallback(
     (list: FileList | null) => {
       if (!list?.length) return;
-      upload(Array.from(list), activeSector as UploadSector);
+      if (!consent) return;
+      upload(
+        Array.from(list),
+        activeSector as UploadSector,
+        consent
+      );
     },
-    [upload, activeSector]
+    [upload, activeSector, consent]
   );
 
   const onDrop = (e: React.DragEvent) => {
@@ -58,23 +64,34 @@ export function SectorUploadFlow() {
         {SECTORS.map((sector) => {
           const Icon = SECTOR_ICONS[sector.id];
           const selected = activeSector === sector.id;
+          const disabled = sector.comingSoon === true;
           return (
             <button
               key={sector.id}
               type="button"
-              onClick={() => setActiveSector(sector.id)}
+              disabled={disabled}
+              onClick={() => {
+                if (!disabled) setActiveSector(sector.id);
+              }}
               className={`rounded-xl border px-4 py-3 text-left transition-colors ${
-                selected
-                  ? "border-ribet-green bg-ribet-green/10"
-                  : "border-ribet-border bg-ribet-card hover:border-ribet-green/40"
+                disabled
+                  ? "cursor-not-allowed border-ribet-border/60 bg-ribet-card/40 opacity-60"
+                  : selected
+                    ? "border-ribet-green bg-ribet-green/10"
+                    : "border-ribet-border bg-ribet-card hover:border-ribet-green/40"
               }`}
             >
               <Icon
-                className={`h-5 w-5 ${selected ? "text-ribet-green" : "text-ribet-muted"}`}
+                className={`h-5 w-5 ${selected && !disabled ? "text-ribet-green" : "text-ribet-muted"}`}
               />
               <p className="mt-2 text-sm font-semibold text-ribet-text">
                 {sector.label}
               </p>
+              {disabled && (
+                <Badge variant="muted" className="mt-2 text-[10px]">
+                  Coming soon
+                </Badge>
+              )}
             </button>
           );
         })}
@@ -129,7 +146,27 @@ export function SectorUploadFlow() {
         </p>
       </div>
 
-      <p className="mt-4 text-center text-xs text-ribet-muted">
+      <label className="mt-4 flex cursor-pointer items-start justify-center gap-2 text-left text-sm text-ribet-muted">
+        <input
+          type="checkbox"
+          checked={consent}
+          onChange={(e) => setConsent(e.target.checked)}
+          className="mt-1"
+        />
+        <span>
+          I confirm I have authority to upload this data and agree to the{" "}
+          <a href="/legal/terms" className="text-ribet-green hover:underline">
+            Terms
+          </a>{" "}
+          and{" "}
+          <a href="/legal/privacy" className="text-ribet-green hover:underline">
+            Privacy Policy
+          </a>
+          .
+        </span>
+      </label>
+
+      <p className="mt-2 text-center text-xs text-ribet-muted">
         {uploadSection.helper} Upload across sectors to unlock logistics insights
         on your dashboard.
       </p>

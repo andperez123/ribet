@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Literal
 from uuid import UUID
 
@@ -46,6 +48,12 @@ class UploadJobsResponse(BaseModel):
     jobs: list[UploadJob]
 
 
+class DemoOrgResponse(BaseModel):
+    org_id: UUID
+    org_name: str
+    jobs: list[UploadJob]
+
+
 class FindingOut(BaseModel):
     id: UUID
     finding_type: str
@@ -57,6 +65,8 @@ class FindingOut(BaseModel):
     department: str
     category: str
     suggested_action: str | None = None
+    narrative: str | None = None
+    recommendation: str | None = None
     detected_at: str
 
     model_config = {"from_attributes": True}
@@ -71,6 +81,18 @@ class HealthScore(BaseModel):
 
 class HealthHistory(BaseModel):
     snapshots: list[HealthScore]
+
+
+class ReportSummary(BaseModel):
+    id: UUID
+    generated_at: str
+    health_score: int
+    health_status: str
+    finding_count: int = 0
+
+
+class ReportsListResponse(BaseModel):
+    reports: list[ReportSummary]
 
 
 class OperationalReportOut(BaseModel):

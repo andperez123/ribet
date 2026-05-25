@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
 import { Inter_Tight } from "next/font/google";
 import "./globals.css";
 
@@ -19,9 +20,14 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
+  const body = (
     <html lang="en" className={interTight.variable}>
       <body className="min-h-screen antialiased">{children}</body>
     </html>
   );
+
+  if (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+    return <ClerkProvider>{body}</ClerkProvider>;
+  }
+  return body;
 }

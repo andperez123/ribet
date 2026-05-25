@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import (
     Boolean,
@@ -8,12 +11,16 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
+    Uuid,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+JsonColumn = JSON().with_variant(JSONB(), "postgresql")
 
 from app.database import Base
 
@@ -21,10 +28,12 @@ from app.database import Base
 class Organization(Base):
     __tablename__ = "organizations"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     erp_family: Mapped[str] = mapped_column(String(50), default="jobboss")
-    portfolio_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    portfolio_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, nullable=True)
+    clerk_org_id: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
+    email_recipients: Mapped[Optional[list]] = mapped_column(JsonColumn, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     jobs: Mapped[list["IngestJob"]] = relationship(back_populates="organization")
@@ -34,16 +43,17 @@ class IngestJob(Base):
     __tablename__ = "ingest_jobs"
     __table_args__ = (Index("ix_ingest_jobs_org_status", "org_id", "status"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
     file_name: Mapped[str] = mapped_column(String(512), nullable=False)
-    mime_type: Mapped[str | None] = mapped_column(String(128))
+    mime_type: Mapped[Optional[str]] = mapped_column(String(128))
     storage_key: Mapped[str] = mapped_column(String(1024), nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="pending")
-    errors: Mapped[list | None] = mapped_column(JSONB, default=list)
-    report_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    report_type: Mapped[str | None] = mapped_column(String(64))
-    sector: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    errors: Mapped[Optional[list]] = mapped_column(JsonColumn, default=list)
+    report_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, nullable=True)
+    report_type: Mapped[Optional[str]] = mapped_column(String(64))
+    sector: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    consent_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -56,10 +66,10 @@ class OrgProgress(Base):
     __tablename__ = "org_progress"
 
     org_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id"), primary_key=True
+        Uuid, ForeignKey("organizations.id"), primary_key=True
     )
-    sectors_covered: Mapped[dict] = mapped_column(JSONB, default=dict)
-    unlocked_capabilities: Mapped[list] = mapped_column(JSONB, default=list)
+    sectors_covered: Mapped[dict] = mapped_column(JsonColumn, default=dict)
+    unlocked_capabilities: Mapped[list] = mapped_column(JsonColumn, default=list)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -71,10 +81,10 @@ class OperationalFinding(Base):
         Index("ix_findings_org_severity", "org_id", "severity", "detected_at"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
-    job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ingest_jobs.id"))
-    report_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("operational_reports.id"))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
+    job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("ingest_jobs.id"))
+    report_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("operational_reports.id"))
     finding_type: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     detail: Mapped[str] = mapped_column(Text, nullable=False)
@@ -84,21 +94,44 @@ class OperationalFinding(Base):
     department: Mapped[str] = mapped_column(String(64), nullable=False)
     category: Mapped[str] = mapped_column(String(64), nullable=False)
     fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
-    suggested_action: Mapped[str | None] = mapped_column(Text)
+    suggested_action: Mapped[Optional[str]] = mapped_column(Text)
+    narrative: Mapped[Optional[str]] = mapped_column(Text)
+    recommendation: Mapped[Optional[str]] = mapped_column(Text)
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OperationalSnapshot(Base):
+    __tablename__ = "operational_snapshots"
+    __table_args__ = (Index("ix_op_snapshots_org_period", "org_id", "period", unique=True),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
+    period: Mapped[str] = mapped_column(String(16), nullable=False)
+    cash_position: Mapped[Optional[float]] = mapped_column(Float)
+    ar_over_90_pct: Mapped[Optional[float]] = mapped_column(Float)
+    ar_total: Mapped[Optional[float]] = mapped_column(Float)
+    ap_total: Mapped[Optional[float]] = mapped_column(Float)
+    inventory_value: Mapped[Optional[float]] = mapped_column(Float)
+    inventory_turns: Mapped[Optional[float]] = mapped_column(Float)
+    vendor_concentration: Mapped[Optional[float]] = mapped_column(Float)
+    health_score: Mapped[int] = mapped_column(Integer, default=0)
+    health_status: Mapped[str] = mapped_column(String(32), default="Stable")
+    metrics: Mapped[dict] = mapped_column(JsonColumn, default=dict)
+    source_job_ids: Mapped[list] = mapped_column(JsonColumn, default=list)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class HealthSnapshot(Base):
     __tablename__ = "health_snapshots"
     __table_args__ = (Index("ix_health_org_computed", "org_id", "computed_at"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
-    report_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("operational_reports.id"))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
+    report_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("operational_reports.id"))
     score: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
-    components: Mapped[dict] = mapped_column(JSONB, default=dict)
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    components: Mapped[dict] = mapped_column(JsonColumn, default=dict)
+    metadata_: Mapped[dict] = mapped_column("metadata", JsonColumn, default=dict)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -106,8 +139,8 @@ class OperationalMemory(Base):
     __tablename__ = "operational_memory"
     __table_args__ = (Index("ix_memory_org_fingerprint", "org_id", "fingerprint", unique=True),)
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
     fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
     finding_type: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(512), nullable=False)
@@ -115,21 +148,21 @@ class OperationalMemory(Base):
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     occurrence_count: Mapped[int] = mapped_column(Integer, default=1)
     severity_peak: Mapped[str] = mapped_column(String(32), default="medium")
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    metadata_: Mapped[dict] = mapped_column("metadata", JsonColumn, default=dict)
 
 
 class OperationalReport(Base):
     __tablename__ = "operational_reports"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
-    job_ids: Mapped[list] = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
-    executive_summary: Mapped[list] = mapped_column(JSONB, default=list)
-    financial_findings: Mapped[list] = mapped_column(JSONB, default=list)
-    operational_findings: Mapped[list] = mapped_column(JSONB, default=list)
-    risk_areas: Mapped[list] = mapped_column(JSONB, default=list)
-    suggested_actions: Mapped[list] = mapped_column(JSONB, default=list)
-    trend_snapshot: Mapped[list] = mapped_column(JSONB, default=list)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
+    job_ids: Mapped[list] = mapped_column(JsonColumn, default=list)
+    executive_summary: Mapped[list] = mapped_column(JsonColumn, default=list)
+    financial_findings: Mapped[list] = mapped_column(JsonColumn, default=list)
+    operational_findings: Mapped[list] = mapped_column(JsonColumn, default=list)
+    risk_areas: Mapped[list] = mapped_column(JsonColumn, default=list)
+    suggested_actions: Mapped[list] = mapped_column(JsonColumn, default=list)
+    trend_snapshot: Mapped[list] = mapped_column(JsonColumn, default=list)
     health_score: Mapped[int] = mapped_column(Integer, default=0)
     health_status: Mapped[str] = mapped_column(String(32), default="Stable")
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -139,104 +172,123 @@ class ProductEvent(Base):
     __tablename__ = "product_events"
     __table_args__ = (Index("ix_product_events_type_created", "event_type", "created_at"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    org_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
-    job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ingest_jobs.id"))
-    report_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("operational_reports.id"))
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
+    org_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("ingest_jobs.id"))
+    report_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("operational_reports.id"))
+    metadata_: Mapped[dict] = mapped_column("metadata", JsonColumn, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class BenchmarkCohort(Base):
     __tablename__ = "benchmark_cohorts"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    criteria: Mapped[dict] = mapped_column(JSONB, default=dict)
+    criteria: Mapped[dict] = mapped_column(JsonColumn, default=dict)
 
 
 class BenchmarkMetric(Base):
     __tablename__ = "benchmark_metrics"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    cohort_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("benchmark_cohorts.id"))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    cohort_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("benchmark_cohorts.id"))
     metric_key: Mapped[str] = mapped_column(String(128), nullable=False)
-    p25: Mapped[float | None] = mapped_column(Float)
-    p50: Mapped[float | None] = mapped_column(Float)
-    p75: Mapped[float | None] = mapped_column(Float)
+    p25: Mapped[Optional[float]] = mapped_column(Float)
+    p50: Mapped[Optional[float]] = mapped_column(Float)
+    p75: Mapped[Optional[float]] = mapped_column(Float)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class OrgBenchmarkEligibility(Base):
     __tablename__ = "org_benchmark_eligibility"
 
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"), primary_key=True)
-    cohort_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("benchmark_cohorts.id"), primary_key=True)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), primary_key=True)
+    cohort_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("benchmark_cohorts.id"), primary_key=True)
     opted_in: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 # Normalized domain tables
 class Customer(Base):
     __tablename__ = "customers"
-    __table_args__ = (Index("ix_customers_org", "org_id"),)
+    __table_args__ = (
+        Index("ix_customers_org", "org_id"),
+        Index("ix_customers_org_cust", "org_id", "customer_id", unique=True),
+    )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     customer_id: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(512))
-    source_job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    source_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
 
 
 class Vendor(Base):
     __tablename__ = "vendors"
-    __table_args__ = (Index("ix_vendors_org", "org_id"),)
+    __table_args__ = (
+        Index("ix_vendors_org", "org_id"),
+        Index("ix_vendors_org_period", "org_id", "period_label"),
+    )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     vendor_id: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(512))
-    balance: Mapped[float | None] = mapped_column(Float)
-    source_job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    balance: Mapped[Optional[float]] = mapped_column(Float)
+    period_label: Mapped[str] = mapped_column(String(16), default="unknown")
+    source_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
 
 
 class GlTransaction(Base):
     __tablename__ = "gl_transactions"
-    __table_args__ = (Index("ix_gl_org", "org_id"),)
+    __table_args__ = (
+        Index("ix_gl_org", "org_id"),
+        Index("ix_gl_org_period", "org_id", "period_label"),
+    )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     transaction_id: Mapped[str] = mapped_column(String(128))
     account_id: Mapped[str] = mapped_column(String(128))
-    account_name: Mapped[str | None] = mapped_column(String(512))
+    account_name: Mapped[Optional[str]] = mapped_column(String(512))
     amount: Mapped[float] = mapped_column(Float, default=0)
-    posted_at: Mapped[str | None] = mapped_column(String(32))
-    source_job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    posted_at: Mapped[Optional[str]] = mapped_column(String(32))
+    period_label: Mapped[str] = mapped_column(String(16), default="unknown")
+    source_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
 
 
 class Invoice(Base):
     __tablename__ = "invoices"
-    __table_args__ = (Index("ix_invoices_org", "org_id"),)
+    __table_args__ = (
+        Index("ix_invoices_org", "org_id"),
+        Index("ix_invoices_org_period", "org_id", "period_label"),
+    )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     invoice_id: Mapped[str] = mapped_column(String(128))
     customer_id: Mapped[str] = mapped_column(String(128))
     amount: Mapped[float] = mapped_column(Float, default=0)
-    due_date: Mapped[str | None] = mapped_column(String(32))
-    days_overdue: Mapped[int | None] = mapped_column(Integer)
-    aging_bucket: Mapped[str | None] = mapped_column(String(32))
-    source_job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    due_date: Mapped[Optional[str]] = mapped_column(String(32))
+    days_overdue: Mapped[Optional[int]] = mapped_column(Integer)
+    aging_bucket: Mapped[Optional[str]] = mapped_column(String(32))
+    period_label: Mapped[str] = mapped_column(String(16), default="unknown")
+    source_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
 
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"
-    __table_args__ = (Index("ix_inventory_org", "org_id"),)
+    __table_args__ = (
+        Index("ix_inventory_org", "org_id"),
+        Index("ix_inventory_org_period", "org_id", "period_label"),
+    )
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("organizations.id"))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     item_id: Mapped[str] = mapped_column(String(128))
     sku: Mapped[str] = mapped_column(String(128))
     quantity: Mapped[float] = mapped_column(Float, default=0)
-    gl_account: Mapped[str | None] = mapped_column(String(128))
-    source_job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    gl_account: Mapped[Optional[str]] = mapped_column(String(128))
+    period_label: Mapped[str] = mapped_column(String(16), default="unknown")
+    source_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)

@@ -1,10 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import {
-  Activity,
-  BarChart3,
-  Lightbulb,
-  MessageCircle,
-} from "lucide-react";
+import { Activity, BarChart3, Lightbulb } from "lucide-react";
 
 export const nav = {
   brand: "ribet",
@@ -13,10 +8,11 @@ export const nav = {
 };
 
 export const hero = {
-  headline: ["Your AI", "operations", "manager."],
-  highlightWord: "manager.",
-  subheadline: "Ribet watches your operation\nso you can run it.",
-  primaryCta: "See Ribet in action",
+  headline: ["Operational health,", "from your ERP", "exports."],
+  highlightWord: "exports.",
+  subheadline:
+    "Ribet turns AR, AP, GL, and inventory exports into an operational health report for SMB manufacturers.",
+  primaryCta: "Try demo data",
   secondaryCta: "How it works",
   alert: "3 issues found",
 };
@@ -28,9 +24,9 @@ export const trustBar = {
 export const uploadSection = {
   headline: ["Upload by sector.", "Unlock logistics."],
   boxTitle: "Upload your ERP exports",
-  boxSubtitle: "CSV, Excel, or PDF",
+  boxSubtitle: "CSV or Excel",
   helper: "No ERP integrations required.",
-  accepted: ".csv,.xlsx,.xls,.pdf",
+  accepted: ".csv,.xlsx,.xls",
 };
 
 export type FeatureCard = {
@@ -41,37 +37,29 @@ export type FeatureCard = {
 
 export const whatRibetDoes: FeatureCard[] = [
   {
-    title: "Detect issues",
+    title: "Detect cash and inventory risks",
     description: [
-      "Duplicate invoices.",
-      "Inventory mismatches.",
-      "Margin leaks.",
+      "AR aging spikes.",
+      "Vendor concentration.",
+      "Inventory adjustments.",
     ],
     icon: Activity,
   },
   {
-    title: "Understand operations",
+    title: "Score operational health",
     description: [
-      "See what is slowing",
-      "cash flow and efficiency.",
+      "A single health score",
+      "with component breakdowns.",
     ],
     icon: BarChart3,
   },
   {
-    title: "Get recommendations",
+    title: "Explain what to do next",
     description: [
-      "Ribet explains",
-      "what needs attention.",
+      "Prioritized findings",
+      "with suggested actions.",
     ],
     icon: Lightbulb,
-  },
-  {
-    title: "Ask questions",
-    description: [
-      '"Which jobs lost money?"',
-      '"What changed margins?"',
-    ],
-    icon: MessageCircle,
   },
 ];
 
@@ -81,18 +69,18 @@ export const howItWorks = {
     { step: 1, title: "Upload ERP exports" },
     { step: 2, title: "Ribet normalizes your data" },
     { step: 3, title: "Ribet finds operational risks" },
-    { step: 4, title: "Get daily operational intelligence" },
+    { step: 4, title: "Get a weekly operational health report" },
   ],
 };
 
 export const finalCta = {
   headline: ["Know what's happening", "inside your operation."],
   subtext:
-    "Ribet monitors financial and operational data to detect issues before they become losses.",
+    "Ribet analyzes ERP exports and surfaces operational risks before they become losses.",
   cta: "Book a demo",
 };
 
 export const footer = {
-  tagline: "Ribet watches your operation.",
+  tagline: "Operational intelligence from ERP exports.",
   copyright: `© ${new Date().getFullYear()} Ribet`,
 };

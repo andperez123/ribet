@@ -17,13 +17,21 @@ export function useUpload() {
   const [lastReportId, setLastReportId] = useState<string | null>(null);
 
   const upload = useCallback(
-    async (fileList: File[], sector: UploadSector) => {
+    async (
+      fileList: File[],
+      sector: UploadSector,
+      consentAcknowledged = false
+    ) => {
       if (!fileList.length) return;
       setIsUploading(true);
       setError(null);
 
       try {
-        const results = await client.upload(fileList, sector);
+        const results = await client.upload(
+          fileList,
+          sector,
+          consentAcknowledged
+        );
         setFiles((prev) => [...prev, ...results]);
         const reportId = [...results]
           .reverse()
