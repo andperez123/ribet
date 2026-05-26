@@ -43,6 +43,8 @@ Add the **Postgres** plugin and link `DATABASE_URL` to **api** and **worker**.
 | `S3_BUCKET` | Yes | e.g. `ribet-uploads` |
 | `STORAGE_BACKEND` | No | `s3` (default) or `local` for dev |
 | `CORS_ORIGINS` | Yes | Comma-separated web URLs, e.g. `https://app.ribet.com` |
+| `RESEND_API_KEY` | No | Report-ready + weekly brief emails |
+| `RIBET_APP_URL` | Yes | Public web URL for email report links |
 
 ### Web
 
@@ -80,6 +82,8 @@ No code changes required — storage uses boto3 S3-compatible API.
 | API | `GET /health` | Liveness (Railway healthcheck) |
 | API | `GET /health/ready` | Readiness (includes DB check) |
 | Web | `GET /api/health` | Liveness |
+| Web | `GET /api/health/worker` | Worker queue + heartbeat (proxies API) |
+| API | `GET /health/worker` | Pending/processing jobs, `worker_alive` |
 
 Configure these in Railway service settings for reliable deploys. Do **not** set a healthcheck on **worker** — it only runs `python -m app.worker.process_job` (no uvicorn).
 

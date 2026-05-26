@@ -44,7 +44,7 @@ export class MockUploadClient implements UploadClient {
   }
 }
 
-/** Calls Next.js BFF → FastAPI */
+/** Calls Next.js BFF → FastAPI; returns after files are queued (async processing). */
 export class ApiUploadClient implements UploadClient {
   async upload(
     files: File[],
@@ -67,52 +67,39 @@ export class ApiUploadClient implements UploadClient {
 
     const data = (await res.json()) as UploadJobsResponse;
 
-    const results: UploadFileMeta[] = data.jobs.map((job) => ({
+    return data.jobs.map((job) => ({
       id: job.id,
       name: job.file_name,
       size: 0,
       mimeType: "application/octet-stream",
       sector: (job.sector as UploadSector | undefined) ?? sector,
-      status: job.status,
+      status: normalizeJobStatus(job.status),
       error: job.errors?.[0],
       reportId: job.report_id ?? undefined,
     }));
-
-    await Promise.all(
-      results.map(async (meta) => {
-        if (meta.status === "pending" || meta.status === "processing") {
-          const final = await this.pollUntilDone(meta.id);
-          meta.status = final.status;
-          if (final.reportId) meta.reportId = final.reportId;
-        }
-      })
-    );
-
-    return results;
   }
 
   async pollJob(jobId: string): Promise<UploadJob> {
     const res = await fetch(BFF.ingest.job(jobId));
     if (!res.ok) throw new Error(`Poll failed: ${res.status}`);
-    return res.json() as Promise<UploadJob>;
+    const job = (await res.json()) as UploadJob;
+    return { ...job, status: normalizeJobStatus(job.status) };
   }
+}
 
-  private async pollUntilDone(
-    jobId: string,
-    maxAttempts = 60
-  ): Promise<{ status: UploadFileMeta["status"]; reportId?: string }> {
-    for (let i = 0; i < maxAttempts; i++) {
-      const job = await this.pollJob(jobId);
-      if (job.status === "done" || job.status === "error") {
-        return {
-          status: job.status,
-          reportId: job.report_id ?? undefined,
-        };
-      }
-      await delay(2000);
-    }
-    return { status: "error" };
+function normalizeJobStatus(
+  status: string
+): UploadFileMeta["status"] {
+  if (status === "pending") return "processing";
+  if (
+    status === "processing" ||
+    status === "done" ||
+    status === "error" ||
+    status === "uploading"
+  ) {
+    return status;
   }
+  return "processing";
 }
 
 export function createUploadClient(mode: "mock" | "api"): UploadClient {

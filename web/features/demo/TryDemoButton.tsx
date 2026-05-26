@@ -1,21 +1,9 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { UploadJob } from "@/lib/types/upload";
-
-async function pollJob(jobId: string, maxAttempts = 90): Promise<UploadJob> {
-  for (let i = 0; i < maxAttempts; i++) {
-    const res = await fetch(`/api/ingest/jobs/${jobId}`);
-    if (!res.ok) throw new Error(`Poll failed: ${res.status}`);
-    const job = (await res.json()) as UploadJob;
-    if (job.status === "done" || job.status === "error") return job;
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  throw new Error("Demo data processing timed out");
-}
 
 export function TryDemoButton({
   className,
@@ -40,9 +28,10 @@ export function TryDemoButton({
         org_id: string;
         jobs: UploadJob[];
       };
-      const jobs = data.jobs ?? [];
-      await Promise.all(jobs.map((j) => pollJob(j.id)));
-      router.push("/dashboard");
+      if (!data.jobs?.length) {
+        throw new Error("Demo created but no files were queued");
+      }
+      router.push("/dashboard?processing=demo");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Demo failed");
@@ -54,14 +43,7 @@ export function TryDemoButton({
   return (
     <div className={className}>
       <Button type="button" onClick={handleClick} disabled={loading}>
-        {loading ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Building demo…
-          </>
-        ) : (
-          children
-        )}
+        {loading ? "Creating demo workspace…" : children}
       </Button>
       {error && (
         <p className="mt-2 text-sm text-ribet-risk">{error}</p>

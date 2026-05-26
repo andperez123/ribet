@@ -11,7 +11,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
+import { AsyncWorkflowBanner } from "@/components/ui/AsyncWorkflowBanner";
 import { Badge } from "@/components/ui/Badge";
+import { asyncWorkflow } from "@/lib/content/asyncWorkflow";
 import { uploadSection } from "@/lib/content/landing";
 import {
   SECTORS,
@@ -19,6 +21,7 @@ import {
   type SectorId,
 } from "@/lib/sectors";
 import type { UploadSector } from "@/lib/types/upload";
+import { useJobPolling } from "./useJobPolling";
 import { useUpload } from "./useUpload";
 
 const SECTOR_ICONS: Record<SectorId, typeof DollarSign> = {
@@ -33,18 +36,36 @@ export function SectorUploadFlow() {
   const [activeSector, setActiveSector] = useState<SectorId>(DEFAULT_SECTOR);
   const [isDragging, setIsDragging] = useState(false);
   const [consent, setConsent] = useState(false);
-  const { files, upload, isUploading, error, clear, lastReportId } = useUpload();
+  const [consentError, setConsentError] = useState<string | null>(null);
+  const [filesConfirmed, setFilesConfirmed] = useState(false);
+  const {
+    files,
+    setFiles,
+    upload,
+    isUploading,
+    error,
+    clear,
+    lastReportId,
+    setLastReportId,
+  } = useUpload();
+
+  useJobPolling(files, setFiles, (reportId) => {
+    if (reportId) setLastReportId(reportId);
+  });
 
   const activeDef = SECTORS.find((s) => s.id === activeSector)!;
 
   const handleFiles = useCallback(
     (list: FileList | null) => {
       if (!list?.length) return;
-      if (!consent) return;
-      upload(
-        Array.from(list),
-        activeSector as UploadSector,
-        consent
+      if (!consent) {
+        setConsentError(asyncWorkflow.consentRequired);
+        return;
+      }
+      setConsentError(null);
+      setFilesConfirmed(false);
+      upload(Array.from(list), activeSector as UploadSector, consent).then(
+        () => setFilesConfirmed(true)
       );
     },
     [upload, activeSector, consent]
@@ -57,6 +78,11 @@ export function SectorUploadFlow() {
   };
 
   const doneCount = files.filter((f) => f.status === "done").length;
+  const processingCount = files.filter(
+    (f) => f.status === "processing" || f.status === "uploading"
+  ).length;
+  const showUploadBanner =
+    filesConfirmed && files.length > 0 && processingCount + doneCount > 0;
 
   return (
     <div className="w-full">
@@ -101,6 +127,14 @@ export function SectorUploadFlow() {
         {activeDef.description}{" "}
         <span className="text-ribet-text/80">({activeDef.examples})</span>
       </p>
+
+      {showUploadBanner && (
+        <AsyncWorkflowBanner
+          className="mb-6"
+          title={asyncWorkflow.upload.title}
+          body={asyncWorkflow.upload.body}
+        />
+      )}
 
       <div
         role="button"
@@ -150,7 +184,10 @@ export function SectorUploadFlow() {
         <input
           type="checkbox"
           checked={consent}
-          onChange={(e) => setConsent(e.target.checked)}
+          onChange={(e) => {
+            setConsent(e.target.checked);
+            if (e.target.checked) setConsentError(null);
+          }}
           className="mt-1"
         />
         <span>
@@ -165,6 +202,12 @@ export function SectorUploadFlow() {
           .
         </span>
       </label>
+
+      {consentError && (
+        <p className="mt-2 text-center text-sm text-ribet-risk" role="alert">
+          {consentError}
+        </p>
+      )}
 
       <p className="mt-2 text-center text-xs text-ribet-muted">
         {uploadSection.helper} Upload across sectors to unlock logistics insights
@@ -184,6 +227,8 @@ export function SectorUploadFlow() {
             >
               {f.status === "done" ? (
                 <CheckCircle className="h-4 w-4 shrink-0 text-ribet-green" />
+              ) : f.status === "error" ? (
+                <span className="text-ribet-risk text-xs">!</span>
               ) : (
                 <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ribet-green" />
               )}
@@ -194,35 +239,37 @@ export function SectorUploadFlow() {
                 </Badge>
               )}
               <span className="text-xs capitalize text-ribet-muted">
-                {f.status}
+                {f.status === "processing" ? "processing" : f.status}
               </span>
             </div>
           ))}
-          {doneCount > 0 && (
-            <div className="flex flex-wrap items-center gap-4">
-              {lastReportId && (
-                <Link
-                  href={`/dashboard/reports/${lastReportId}`}
-                  className="rounded-full bg-ribet-green px-4 py-2 text-sm font-medium text-ribet-text hover:opacity-90"
-                >
-                  View report
-                </Link>
-              )}
+          <div className="flex flex-wrap items-center gap-4">
+            {(lastReportId ||
+              files.find((f) => f.reportId)?.reportId) && (
               <Link
-                href="/dashboard"
-                className="text-sm font-medium text-ribet-muted hover:text-ribet-text"
+                href={`/dashboard/reports/${lastReportId ?? files.find((f) => f.reportId)?.reportId}`}
+                className="rounded-full bg-ribet-green px-4 py-2 text-sm font-medium text-ribet-text hover:opacity-90"
               >
-                Open dashboard
+                View report
               </Link>
-              <button
-                type="button"
-                onClick={clear}
-                className="text-xs text-ribet-muted underline hover:text-ribet-text"
-              >
-                Clear
-              </button>
-            </div>
-          )}
+            )}
+            <Link
+              href="/dashboard"
+              className="text-sm font-medium text-ribet-muted hover:text-ribet-text"
+            >
+              Open dashboard
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                clear();
+                setFilesConfirmed(false);
+              }}
+              className="text-xs text-ribet-muted underline hover:text-ribet-text"
+            >
+              Clear
+            </button>
+          </div>
         </div>
       )}
     </div>

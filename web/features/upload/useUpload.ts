@@ -52,5 +52,14 @@ export function useUpload() {
     setLastReportId(null);
   }, []);
 
-  return { files, upload, isUploading, error, clear, lastReportId };
+  return {
+    files,
+    setFiles,
+    upload,
+    isUploading,
+    error,
+    clear,
+    lastReportId,
+    setLastReportId,
+  };
 }

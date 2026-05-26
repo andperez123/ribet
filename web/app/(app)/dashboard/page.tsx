@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { DashboardAutoRefresh } from "@/features/dashboard/DashboardAutoRefresh";
+import { DashboardProcessingBanner } from "@/features/dashboard/DashboardProcessingBanner";
 import { ExecutiveSummaryCards } from "@/features/dashboard/ExecutiveSummaryCards";
 import { FindingsList } from "@/features/dashboard/FindingsList";
 import { HealthComponentsGrid } from "@/features/dashboard/HealthComponentsGrid";
@@ -10,7 +13,11 @@ import { SnapshotKpiGrid } from "@/features/dashboard/SnapshotKpiGrid";
 import { UploadsTable } from "@/features/dashboard/UploadsTable";
 import { serverData } from "@/lib/api/server-data";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: { processing?: string };
+}) {
   const [
     report,
     findings,
@@ -36,8 +43,16 @@ export default async function DashboardPage() {
       (s) => s.period !== snapshotLatest?.period
     ) ?? null;
 
+  const jobList = jobs?.jobs ?? [];
+  const hasActiveJobs = jobList.some(
+    (j) => j.status === "pending" || j.status === "processing"
+  );
+
   return (
     <div className="space-y-8">
+      <Suspense fallback={null}>
+        <DashboardAutoRefresh active={hasActiveJobs} />
+      </Suspense>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ribet-text md:text-3xl">
@@ -65,20 +80,27 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {!report ? (
+      {!report && hasActiveJobs && (
+        <DashboardProcessingBanner
+          jobs={jobList}
+          variant={searchParams?.processing === "demo" ? "demo" : "upload"}
+        />
+      )}
+
+      {!report && !hasActiveJobs ? (
         <EmptyState
           title="No report yet"
           description="Upload ERP exports to generate your first operational health report."
           actionLabel="Upload files"
           actionHref="/#upload"
         />
-      ) : (
+      ) : report ? (
         <>
           {healthScore && <HealthScoreHero score={healthScore} />}
           {healthScore && <HealthComponentsGrid score={healthScore} />}
           <ExecutiveSummaryCards report={report} />
         </>
-      )}
+      ) : null}
 
       {snapshotLatest && (
         <section className="space-y-3">

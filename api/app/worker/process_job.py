@@ -97,6 +97,26 @@ def process_job(db, job: IngestJob) -> None:
         db.commit()
         db.refresh(job)
         recompute_org_progress(db, org.id)
+        emit_event(
+            db,
+            "job_done",
+            org_id=org.id,
+            job_id=job.id,
+            report_id=report.id,
+            metadata={"report_type": result.report_type},
+        )
+        db.commit()
+        try:
+            from app.services.email import send_report_ready_email
+
+            send_report_ready_email(db, org.id, report.id)
+        except Exception as mail_err:
+            logger.warning(
+                "report_ready_email_failed org_id=%s report_id=%s error=%s",
+                org.id,
+                report.id,
+                mail_err,
+            )
         logger.info(
             "job_done org_id=%s job_id=%s report_id=%s report_type=%s",
             org.id,
@@ -157,7 +177,13 @@ def run_worker():
                     job.file_name,
                 )
                 process_job(db, job)
+                from app.services.worker_status import touch_worker_heartbeat
+
+                touch_worker_heartbeat(db)
             else:
+                from app.services.worker_status import touch_worker_heartbeat
+
+                touch_worker_heartbeat(db)
                 time.sleep(POLL_INTERVAL)
         except Exception as e:
             logger.exception("worker_error error=%s", e)

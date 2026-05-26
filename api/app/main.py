@@ -85,3 +85,21 @@ def health_ready():
             content={"ok": False, "database": str(e)},
         )
     return {"ok": True, "database": "connected"}
+
+
+@app.get("/health/worker")
+def health_worker():
+    """Queue depth and worker heartbeat for ops / BFF pre-flight."""
+    if not is_database_ready():
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "database": get_database_error() or "initializing"},
+        )
+    from app.database import SessionLocal
+    from app.services.worker_status import get_worker_status
+
+    db = SessionLocal()
+    try:
+        return get_worker_status(db)
+    finally:
+        db.close()

@@ -110,6 +110,89 @@ def send_weekly_brief(db: Session, org_id: UUID, report_id: UUID | None = None) 
     return True
 
 
+def send_report_ready_email(db: Session, org_id: UUID, report_id: UUID) -> bool:
+    """Notify org recipients when a report finishes processing (async workflow)."""
+    if not settings.resend_api_key:
+        return False
+
+    from app.models import ProductEvent
+
+    already = (
+        db.query(ProductEvent.id)
+        .filter(
+            ProductEvent.event_type == "report_ready_email_sent",
+            ProductEvent.report_id == report_id,
+        )
+        .first()
+    )
+    if already:
+        return False
+
+    org = db.get(Organization, org_id)
+    if not org:
+        return False
+
+    recipients = _recipients_for_org(org)
+    if not recipients:
+        return False
+
+    report = db.get(OperationalReport, report_id)
+    if not report:
+        return False
+
+    findings = (
+        db.query(OperationalFinding)
+        .filter(OperationalFinding.report_id == report.id)
+        .all()
+    )
+    high_priority = sum(
+        1 for f in findings if (f.severity or "").lower() in ("high", "critical")
+    )
+    report_count = (
+        db.query(OperationalReport).filter(OperationalReport.org_id == org_id).count()
+    )
+    report_url = f"{settings.ribet_app_url.rstrip('/')}/dashboard/reports/{report.id}"
+    html = _env.get_template("report_ready.html").render(
+        org_name=org.name,
+        finding_count=len(findings),
+        high_priority_count=high_priority,
+        report_count=report_count,
+        report_count_plural="" if report_count == 1 else "s",
+        health_score=report.health_score,
+        health_status=report.health_status,
+        report_url=report_url,
+    )
+
+    import resend
+
+    resend.api_key = settings.resend_api_key
+    resend.Emails.send(
+        {
+            "from": settings.resend_from,
+            "to": recipients,
+            "subject": f"Your Ribet operational report is ready — {org.name}",
+            "html": html,
+        }
+    )
+    from app.services.events import emit_event
+
+    emit_event(
+        db,
+        "report_ready_email_sent",
+        org_id=org_id,
+        report_id=report_id,
+        metadata={"recipients": recipients},
+    )
+    db.commit()
+    logger.info(
+        "report_ready_email_sent org_id=%s report_id=%s to=%s",
+        org_id,
+        report_id,
+        recipients,
+    )
+    return True
+
+
 def send_briefs_for_active_orgs(db: Session) -> int:
     from datetime import datetime, timedelta, timezone
 
