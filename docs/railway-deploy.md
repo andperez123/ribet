@@ -30,6 +30,8 @@ Add the **Postgres** plugin and link `DATABASE_URL` to **api** and **worker**.
 
 ## Environment variables
 
+**Step-by-step checklist (worker parity, web networking, verification script):** [`railway-env-setup.md`](railway-env-setup.md)
+
 ### API + Worker
 
 | Variable | Required | Description |

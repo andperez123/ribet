@@ -75,6 +75,8 @@ Deploy api, worker, web, Postgres, and R2 storage on Railway:
 
 See [`docs/railway-deploy.md`](docs/railway-deploy.md) for the full service layout, env matrix, and deploy steps.
 
+For Railway env setup (worker parity, `FASTAPI_URL`, CORS), see [`docs/railway-env-setup.md`](docs/railway-env-setup.md).
+
 For a Railway UX test script (async batch workflow), see [`docs/railway-new-user-walkthrough.md`](docs/railway-new-user-walkthrough.md).
 
 ## Fixtures
