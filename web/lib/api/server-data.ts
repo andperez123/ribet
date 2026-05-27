@@ -10,15 +10,24 @@ import type {
 } from "@/lib/types/report";
 
 async function fetchApi<T>(path: string): Promise<T | null> {
-  const res = await fetch(`${getFastApiBase()}${path}`, {
-    headers: await getProxyHeaders(),
-    cache: "no-store",
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`);
+  try {
+    const res = await fetch(`${getFastApiBase()}${path}`, {
+      headers: await getProxyHeaders(),
+      cache: "no-store",
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      console.error(`[server-data] ${path} → ${res.status}: ${await res.text()}`);
+      return null;
+    }
+    return res.json() as Promise<T>;
+  } catch (err) {
+    console.error(
+      `[server-data] ${path} → fetch failed (${getFastApiBase()}):`,
+      err
+    );
+    return null;
   }
-  return res.json() as Promise<T>;
 }
 
 export const serverData = {

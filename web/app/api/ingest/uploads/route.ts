@@ -25,15 +25,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const res = await fetch(`${getFastApiBase()}/v1/ingest/uploads`, {
-    method: "POST",
-    headers: await getProxyHeaders(),
-    body: upstream,
-  });
+  try {
+    const headers = await getProxyHeaders();
+    const res = await fetch(`${getFastApiBase()}/v1/ingest/uploads`, {
+      method: "POST",
+      headers,
+      body: upstream,
+    });
 
-  const body = await res.text();
-  return new NextResponse(body, {
-    status: res.status,
-    headers: { "Content-Type": "application/json" },
-  });
+    const body = await res.text();
+    return new NextResponse(body || "{}", {
+      status: res.status,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Upload proxy failed";
+    console.error("[ingest/uploads] upstream fetch failed:", message);
+    return NextResponse.json(
+      {
+        detail:
+          "Could not reach the API. Check FASTAPI_URL on the web service " +
+          "(use https://api.ribetlab.com if private networking fails) and " +
+          "that FASTAPI_API_KEY matches API_KEY.",
+        error: message,
+      },
+      { status: 502 }
+    );
+  }
 }

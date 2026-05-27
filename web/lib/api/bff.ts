@@ -42,9 +42,20 @@ export async function resolveOrgId(explicitOrgId?: string): Promise<string> {
   if (demo) return demo;
 
   if (CLERK_ENABLED) {
-    const { orgId, orgSlug } = await auth();
-    if (orgId) {
-      return lookupOrCreateLocalOrg(orgId, orgSlug || "Organization");
+    try {
+      const { orgId, orgSlug } = await auth();
+      if (orgId) {
+        try {
+          return await lookupOrCreateLocalOrg(orgId, orgSlug || "Organization");
+        } catch (err) {
+          console.error(
+            "[bff] org provisioning failed, using DEV_ORG_ID:",
+            err
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[bff] Clerk auth failed, using DEV_ORG_ID:", err);
     }
   }
 
