@@ -11,6 +11,7 @@ COPY api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api/ .
+COPY fixtures/ ./fixtures/
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
