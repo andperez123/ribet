@@ -77,6 +77,10 @@ See [`docs/railway-deploy.md`](docs/railway-deploy.md) for the full service layo
 
 For Railway env setup (worker parity, `FASTAPI_URL`, CORS), see [`docs/railway-env-setup.md`](docs/railway-env-setup.md).
 
+For enabling sign-in (Google + email) via Clerk, see [`docs/clerk-auth.md`](docs/clerk-auth.md).
+
+For report-ready emails via Resend, see [`docs/resend-email.md`](docs/resend-email.md).
+
 For a Railway UX test script (async batch workflow), see [`docs/railway-new-user-walkthrough.md`](docs/railway-new-user-walkthrough.md).
 
 ## Fixtures

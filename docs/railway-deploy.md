@@ -198,3 +198,21 @@ Railway’s proxy is hitting a different port than Node is listening on (or the 
 3. **Networking** → public domain → target port `3000` (typical for Next.js after setting `PORT=3000` in Variables).
 4. **Deploy logs** → look for `ribet-web starting on 0.0.0.0:XXXX` and use that `XXXX` as the domain port.
 5. Redeploy **ribet_web** after fixing the above.
+
+## Fix: “TLS cert mismatch” on your custom web domain
+
+If `https://<your-web-domain>/api/health` fails with a TLS error like “certificate subject name does not match”, your DNS is pointing at Railway but Railway has not issued a certificate for your custom domain.
+
+**Fix:**
+
+1. Railway → **web** service → **Networking / Domains**
+2. Add `your-web-domain` (and optionally `www.your-web-domain`)
+3. Update DNS records exactly as Railway instructs (provider-specific)
+4. Wait until the domain shows **Active** (certificate provisioned)
+5. Re-run:
+
+```bash
+export WEB_URL="https://your-web-domain"
+export API_URL="https://your-api-domain"
+./scripts/verify-railway-deploy.sh
+```

@@ -14,7 +14,12 @@ from app.services.ingest import validate_file
 from app.services.sectors import validate_sector
 from app.services.storage import upload_file
 
-FIXTURES_DIR = Path(__file__).resolve().parents[3] / "fixtures"
+def _fixtures_dir() -> Path:
+    """api/fixtures in Docker; repo-root/fixtures in local monorepo dev."""
+    api_local = Path(__file__).resolve().parents[2] / "fixtures"
+    if api_local.is_dir():
+        return api_local
+    return Path(__file__).resolve().parents[3] / "fixtures"
 
 FIXTURE_SECTORS: dict[str, str] = {
     "ar_aging_jobboss.csv": "financials",
@@ -66,12 +71,13 @@ def create_demo_organization(db: Session) -> tuple[Organization, list[IngestJob]
     db.flush()
 
     jobs: list[IngestJob] = []
-    if not FIXTURES_DIR.is_dir():
+    fixtures_dir = _fixtures_dir()
+    if not fixtures_dir.is_dir():
         db.commit()
         db.refresh(org)
         return org, jobs
 
-    for path in sorted(FIXTURES_DIR.glob("*.csv")):
+    for path in sorted(fixtures_dir.glob("*.csv")):
         sector = FIXTURE_SECTORS.get(path.name)
         if not sector:
             continue

@@ -150,6 +150,18 @@ Expected:
 - Web `/api/health` → `ok`
 - Web `/api/health/worker` → `worker_alive: true` (after worker has been running ~1 min)
 
+### If verification fails with “TLS cert mismatch”
+If `./scripts/verify-railway-deploy.sh` reports a TLS cert mismatch for `WEB_URL`, your custom domain is pointing at Railway but **Railway has not provisioned HTTPS for that domain** yet.
+
+Fix in Railway:
+
+1. Open **web** → **Networking / Domains**
+2. Add `YOUR-WEB-DOMAIN` (and optionally `www.YOUR-WEB-DOMAIN`)
+3. Follow Railway’s DNS instructions (CNAME/ALIAS/A record, depending on your DNS provider)
+4. Wait for the domain to show as **Active** (certificate issued), then retry verification
+
+Tip: While debugging, you can temporarily set `WEB_URL` to Railway’s generated `*.up.railway.app` domain for the **web** service, since that domain always has a valid certificate.
+
 ---
 
 ## Step 7 — Run the product walkthrough

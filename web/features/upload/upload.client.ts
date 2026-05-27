@@ -62,7 +62,10 @@ export class ApiUploadClient implements UploadClient {
     });
 
     if (!res.ok) {
-      throw new Error(`Upload failed: ${res.status}`);
+      const detail = await res.text();
+      throw new Error(
+        detail ? `Upload failed: ${detail}` : `Upload failed: ${res.status}`
+      );
     }
 
     const data = (await res.json()) as UploadJobsResponse;

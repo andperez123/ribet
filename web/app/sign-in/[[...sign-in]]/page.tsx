@@ -10,8 +10,9 @@ export default function SignInPage() {
       <div className="flex min-h-screen flex-col items-center justify-center px-6">
         <Logo />
         <p className="mt-8 max-w-sm text-center text-lg text-ribet-muted">
-          Sign in is not configured. Use demo data on the home page or open the
-          development dashboard.
+          Sign in is not configured yet. Add Clerk keys on the Railway{" "}
+          <strong>web</strong> service, then redeploy. Until then, use demo data
+          or continue to the dashboard without an account.
         </p>
         <Link
           href="/#upload"

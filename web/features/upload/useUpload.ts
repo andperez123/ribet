@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { getEnv } from "@/lib/config/env";
 import type { UploadFileMeta, UploadSector } from "@/lib/types/upload";
 import { createUploadClient } from "./upload.client";
+import { useUploadMode } from "./useUploadMode";
 
 export function useUpload() {
+  const uploadMode = useUploadMode();
   const client = useMemo(
-    () => createUploadClient(getEnv().NEXT_PUBLIC_UPLOAD_MODE),
-    []
+    () => createUploadClient(uploadMode),
+    [uploadMode]
   );
 
   const [files, setFiles] = useState<UploadFileMeta[]>([]);

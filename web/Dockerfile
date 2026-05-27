@@ -8,6 +8,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# Production Railway deploys should hit the real API, not the mock client.
+ENV NEXT_PUBLIC_UPLOAD_MODE=api
 RUN npm run build
 
 FROM node:20-alpine AS runner

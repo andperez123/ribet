@@ -3,16 +3,16 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { UploadFileMeta } from "@/lib/types/upload";
 import { ApiUploadClient, createUploadClient } from "./upload.client";
-import { getEnv } from "@/lib/config/env";
+import { useUploadMode } from "./useUploadMode";
 
 export function useJobPolling(
   files: UploadFileMeta[],
   setFiles: React.Dispatch<React.SetStateAction<UploadFileMeta[]>>,
   onReportReady?: (reportId: string) => void
 ) {
-  const clientRef = useRef(
-    createUploadClient(getEnv().NEXT_PUBLIC_UPLOAD_MODE)
-  );
+  const uploadMode = useUploadMode();
+  const clientRef = useRef(createUploadClient(uploadMode));
+  clientRef.current = createUploadClient(uploadMode);
 
   const poll = useCallback(async () => {
     const client = clientRef.current;

@@ -69,8 +69,8 @@ def initialize_database() -> None:
     try:
         wait_for_database()
         _run_migrations()
-        if settings.ribet_env in ("local", "test"):
-            seed_demo_orgs()
+        # Idempotent — required for Railway web DEV_ORG_ID until Clerk provisions orgs.
+        seed_demo_orgs()
         _db_ready = True
         logger.info("database_initialized")
     except Exception as exc:

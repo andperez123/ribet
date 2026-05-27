@@ -43,7 +43,12 @@ check_json() {
       fail "$label (unexpected body: ${body:0:120})"
     fi
   else
-    fail "$label (no response or HTTP error)"
+    rc=$?
+    if [[ "$rc" -eq 60 ]]; then
+      fail "$label (TLS cert mismatch — verify Railway custom domain + HTTPS cert provisioning)"
+    else
+      fail "$label (no response or HTTP error)"
+    fi
   fi
 }
 
@@ -68,7 +73,12 @@ if body=$(curl -sf --max-time 15 "$WEB_URL/api/health/worker" 2>/dev/null); then
   processing=$(echo "$body" | grep -o '"processing_jobs":[0-9]*' || true)
   echo "       $pending $processing"
 else
-  fail "GET /api/health/worker (is FASTAPI_URL set on web?)"
+  rc=$?
+  if [[ "$rc" -eq 60 ]]; then
+    fail "GET /api/health/worker (TLS cert mismatch — verify Railway custom domain + HTTPS cert provisioning)"
+  else
+    fail "GET /api/health/worker (is FASTAPI_URL set on web?)"
+  fi
 fi
 
 echo ""
