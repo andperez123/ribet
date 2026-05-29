@@ -11,6 +11,20 @@ const CLERK_ENABLED = Boolean(
   process.env.CLERK_SECRET_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 );
 
+export class OrgResolutionError extends Error {
+  constructor(message = "Sign in required to access this organization.") {
+    super(message);
+    this.name = "OrgResolutionError";
+  }
+}
+
+function isProductionEnv(): boolean {
+  return (
+    process.env.NODE_ENV === "production" ||
+    process.env.RIBET_ENV === "production"
+  );
+}
+
 export function getFastApiBase(): string {
   return FASTAPI_URL.replace(/\/$/, "");
 }
@@ -41,6 +55,8 @@ export async function resolveOrgId(explicitOrgId?: string): Promise<string> {
   const demo = cookieStore.get(DEMO_COOKIE)?.value;
   if (demo) return demo;
 
+  const production = isProductionEnv();
+
   if (CLERK_ENABLED) {
     try {
       const { orgId, orgSlug } = await auth();
@@ -48,15 +64,29 @@ export async function resolveOrgId(explicitOrgId?: string): Promise<string> {
         try {
           return await lookupOrCreateLocalOrg(orgId, orgSlug || "Organization");
         } catch (err) {
-          console.error(
-            "[bff] org provisioning failed, using DEV_ORG_ID:",
-            err
-          );
+          console.error("[bff] org provisioning failed:", err);
+          if (production) {
+            throw new OrgResolutionError(
+              "Could not provision your organization. Try again or contact support."
+            );
+          }
         }
       }
+      if (production) {
+        throw new OrgResolutionError();
+      }
     } catch (err) {
-      console.error("[bff] Clerk auth failed, using DEV_ORG_ID:", err);
+      if (err instanceof OrgResolutionError) throw err;
+      console.error("[bff] Clerk auth failed:", err);
+      if (production) {
+        throw new OrgResolutionError();
+      }
     }
+  } else if (production) {
+    console.warn(
+      "[bff] Production without Clerk — all dashboard users share DEV_ORG_ID. " +
+        "Set NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY on web."
+    );
   }
 
   return DEV_ORG_ID;

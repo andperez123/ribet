@@ -1,4 +1,4 @@
-import { getFastApiBase, getProxyHeaders } from "./bff";
+import { OrgResolutionError, getFastApiBase, getProxyHeaders } from "./bff";
 import type { OrgProgress } from "@/lib/sectors";
 import type {
   Finding,
@@ -22,6 +22,9 @@ async function fetchApi<T>(path: string): Promise<T | null> {
     }
     return res.json() as Promise<T>;
   } catch (err) {
+    if (err instanceof OrgResolutionError) {
+      throw err;
+    }
     console.error(
       `[server-data] ${path} → fetch failed (${getFastApiBase()}):`,
       err

@@ -9,7 +9,8 @@ def test_narrator_off_returns_empty():
         mock_settings.ribet_narration = "off"
         mock_settings.openai_api_key = "sk-test"
         result = narrate_findings_batch([], "Acme", None, None)
-    assert result == {}
+    assert result.narratives == {}
+    assert result.skipped is True
 
 
 def test_narrator_mock_openai():
@@ -25,13 +26,21 @@ def test_narrator_mock_openai():
         suggested_action="Review top overdue accounts",
     )
     mock_response = MagicMock()
+    fp = finding.fingerprint
     mock_response.choices = [
         MagicMock(
             message=MagicMock(
-                content='{"narratives":[{"fingerprint":"ar-90","narrative":"Cash collection slowed.","recommendation":"Call top 5 accounts."}]}'
+                content=(
+                    f'{{"narratives":[{{"fingerprint":"{fp}",'
+                    f'"narrative":"Cash collection slowed.",'
+                    f'"recommendation":"Call top 5 accounts."}}]}}'
+                )
             )
         )
     ]
+    mock_response.usage = MagicMock(
+        prompt_tokens=10, completion_tokens=20, total_tokens=30
+    )
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_response
 
@@ -41,5 +50,6 @@ def test_narrator_mock_openai():
         with patch("openai.OpenAI", return_value=mock_client):
             result = narrate_findings_batch([finding], "Acme", None, None)
 
-    assert "ar-90" in result
-    assert result["ar-90"]["narrative"]
+    assert fp in result.narratives
+    assert result.narratives[fp]["narrative"]
+    assert result.duration_ms >= 0

@@ -5,12 +5,14 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import OperationalFinding, OperationalMemory, OperationalReport
 from app.services.events import emit_event
 from app.services.health import build_trend_snapshot, compute_health, get_prior_snapshot
 from app.services.memory import upsert_memory
 from app.models import Organization
 from app.services.narrator import narrate_findings_batch
+from app.services.telemetry import track_stage
 from app.services.rules.runner import RuleFinding, run_rules, run_snapshot_delta_rules
 from app.services.transforms.snapshot import (
     build_operational_snapshot,
@@ -57,7 +59,9 @@ def generate_report(
     job_ids: list[UUID],
     period: str | None = None,
 ) -> OperationalReport:
-    findings = run_rules(db, org_id)
+    job_id = job_ids[0] if job_ids else None
+    with track_stage(db, "rules", org_id=org_id, job_id=job_id):
+        findings = run_rules(db, org_id)
 
     org = db.get(Organization, org_id)
     org_name = org.name if org else "Organization"
@@ -82,11 +86,49 @@ def generate_report(
         health_snap.score,
         health_snap.status,
     )
-    findings.extend(run_snapshot_delta_rules(db, org_id))
+    with track_stage(db, "rules_delta", org_id=org_id, job_id=job_id):
+        findings.extend(run_snapshot_delta_rules(db, org_id))
     upsert_memory(db, org_id, findings)
     trends = list(trends) + snapshot_delta_strings(op_snap, prior_op)
 
-    narratives = narrate_findings_batch(findings, org_name, op_snap, prior_op)
+    if settings.ribet_narration.lower() == "on" and settings.openai_api_key:
+        emit_event(
+            db,
+            "narration_started",
+            org_id=org_id,
+            job_id=job_id,
+            metadata={"finding_count": len(findings)},
+        )
+        db.commit()
+
+    narration = narrate_findings_batch(findings, org_name, op_snap, prior_op)
+    narr_meta = {
+        "duration_ms": narration.duration_ms,
+        "model_name": narration.model_name,
+        "token_usage": narration.token_usage,
+        "finding_count": len(findings),
+        "narrated_count": len(narration.narratives),
+        "skipped": narration.skipped,
+    }
+    if narration.failed:
+        emit_event(
+            db,
+            "narration_failed",
+            org_id=org_id,
+            job_id=job_id,
+            metadata={**narr_meta, "error_type": narration.error_type},
+        )
+        db.commit()
+    elif not narration.skipped:
+        emit_event(
+            db,
+            "narration_completed",
+            org_id=org_id,
+            job_id=job_id,
+            metadata=narr_meta,
+        )
+        db.commit()
+    narratives = narration.narratives
 
     financial = [f.to_dict() for f in findings if f.category == "financial"]
     operational = [f.to_dict() for f in findings if f.category == "operational"]
@@ -127,7 +169,15 @@ def generate_report(
     report.health_status = health_snap.status
 
     if job_ids:
-        persist_findings(db, org_id, job_ids[0], report.id, findings, narratives)
+        with track_stage(
+            db,
+            "report_persist",
+            org_id=org_id,
+            job_id=job_id,
+            report_id=report.id,
+            extra={"finding_count": len(findings)},
+        ):
+            persist_findings(db, org_id, job_ids[0], report.id, findings, narratives)
 
     db.commit()
     db.refresh(report)
@@ -136,8 +186,13 @@ def generate_report(
         "report_generated",
         org_id=org_id,
         report_id=report.id,
-        job_id=job_ids[0] if job_ids else None,
-        metadata={"health_score": report.health_score, "finding_count": len(findings)},
+        job_id=job_id,
+        metadata={
+            "health_score": report.health_score,
+            "finding_count": len(findings),
+            "narration_failed": narration.failed,
+            "narration_ms": narration.duration_ms,
+        },
     )
     db.commit()
     return report

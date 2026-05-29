@@ -45,7 +45,7 @@ Set these on **api** first, then copy the **same values** to **worker**.
 | `S3_SECRET_KEY` | R2 secret |
 | `S3_BUCKET` | `ribet-uploads` |
 | `STORAGE_BACKEND` | `s3` |
-| `RIBET_ENV` | `production` (or omit; not `local` on Railway) |
+| `RIBET_ENV` | `production` on **api**, **worker**, and **web** (enables strict sign-in on BFF) |
 
 On **api** only (for now):
 
@@ -54,7 +54,15 @@ On **api** only (for now):
 | `CORS_ORIGINS` | Your public web URL, e.g. `https://ribet-web-production.up.railway.app` |
 | `RIBET_APP_URL` | Same public web URL (email links) |
 
-Optional (email after report ready):
+Optional (AI narration — recommended for staging/prod when testing analysis):
+
+| Variable | Where |
+|----------|--------|
+| `OPENAI_API_KEY` | **api** + **worker** |
+| `RIBET_NARRATION` | `on` on **api** + **worker** |
+| `RIBET_NARRATION_TIMEOUT_SECONDS` | **api** + **worker** (default 90) |
+
+Optional (email — not required for launch):
 
 | Variable | Where |
 |----------|--------|
@@ -86,9 +94,25 @@ Redeploy worker after env changes.
 | `NEXT_PUBLIC_UPLOAD_MODE` | `api` |
 | `FASTAPI_API_KEY` | **same** as api `API_KEY` |
 | `FASTAPI_URL` | See below |
-| `DEV_ORG_ID` | `11111111-1111-1111-1111-111111111111` |
+| `RIBET_ENV` | `production` |
 | `ADMIN_SECRET` | third `openssl` value (metrics page cookie) |
 | `ADMIN_API_KEY` | **same** as api `ADMIN_API_KEY` |
+
+**Clerk (production sign-in — recommended):**
+
+| Variable | Value |
+|----------|--------|
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | From Clerk dashboard |
+| `CLERK_SECRET_KEY` | From Clerk dashboard |
+| `CLERK_WEBHOOK_SECRET` | Webhook signing secret (`organization.created` → `/api/webhooks/clerk`) |
+
+See [`clerk-auth.md`](clerk-auth.md). Omit `DEV_ORG_ID` when Clerk is enabled.
+
+**Demo-only (no Clerk):**
+
+| Variable | Value |
+|----------|--------|
+| `DEV_ORG_ID` | `11111111-1111-1111-1111-111111111111` |
 
 ### `FASTAPI_URL` (critical)
 
@@ -220,9 +244,14 @@ STORAGE_BACKEND=s3
 
 ```
 NEXT_PUBLIC_UPLOAD_MODE=api
+RIBET_ENV=production
 FASTAPI_URL=http://${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}
 FASTAPI_API_KEY=<same-as-api-API_KEY>
-DEV_ORG_ID=11111111-1111-1111-1111-111111111111
 ADMIN_SECRET=<your-admin-secret>
 ADMIN_API_KEY=<same-as-api-ADMIN_API_KEY>
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=<clerk-pk>
+CLERK_SECRET_KEY=<clerk-sk>
+CLERK_WEBHOOK_SECRET=<clerk-whsec>
 ```
+
+**Full launch walkthrough:** [`railway-launch.md`](railway-launch.md)

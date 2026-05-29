@@ -12,6 +12,7 @@ from app.database import SessionLocal
 from app.models import IngestJob, Organization
 from app.services.transforms.pipeline import transform_upload
 from app.services.events import emit_event
+from app.services.telemetry import track_stage
 from app.services.progress import recompute_org_progress
 from app.services.report import generate_report
 
@@ -82,7 +83,14 @@ def process_job(db, job: IngestJob) -> None:
             )
             return
 
-        result = transform_upload(db, org, job.id, job.file_name, job.storage_key)
+        with track_stage(
+            db,
+            "transform",
+            org_id=org.id,
+            job_id=job.id,
+            extra={"file_name": job.file_name},
+        ):
+            result = transform_upload(db, org, job.id, job.file_name, job.storage_key)
         job.report_type = result.report_type
         db.commit()
 
@@ -90,7 +98,14 @@ def process_job(db, job: IngestJob) -> None:
             _fail_job(db, job, "Could not detect report type or parse file")
             return
 
-        report = generate_report(db, org.id, [job.id], period=result.period)
+        with track_stage(
+            db,
+            "report",
+            org_id=org.id,
+            job_id=job.id,
+            extra={"report_type": result.report_type, "row_count": result.row_count},
+        ):
+            report = generate_report(db, org.id, [job.id], period=result.period)
         job.report_id = report.id
         job.status = "done"
         job.updated_at = datetime.now(timezone.utc)
@@ -170,6 +185,14 @@ def run_worker():
 
             job = claim_job(db)
             if job:
+                emit_event(
+                    db,
+                    "job_claimed",
+                    org_id=job.org_id,
+                    job_id=job.id,
+                    metadata={"file_name": job.file_name, "sector": job.sector},
+                )
+                db.commit()
                 logger.info(
                     "job_claimed org_id=%s job_id=%s file_name=%s",
                     job.org_id,

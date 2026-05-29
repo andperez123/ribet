@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
+import { bffAuthErrorResponse } from "./bff-errors";
 import { getFastApiBase, getProxyHeaders } from "./bff";
 
 export async function proxyGet(path: string, search?: URLSearchParams) {
   const qs = search?.toString();
   const url = `${getFastApiBase()}${path}${qs ? `?${qs}` : ""}`;
+  let headers: HeadersInit;
+  try {
+    headers = await getProxyHeaders();
+  } catch (err) {
+    const authResp = bffAuthErrorResponse(err);
+    if (authResp) return authResp;
+    throw err;
+  }
   const res = await fetch(url, {
-    headers: await getProxyHeaders(),
+    headers,
     cache: "no-store",
   });
   const body = await res.text();

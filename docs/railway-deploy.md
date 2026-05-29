@@ -2,6 +2,8 @@
 
 Deploy Ribet as a multi-service Railway project with product traction metrics at `/admin/metrics`.
 
+**Start here for a step-by-step launch:** [`railway-launch.md`](railway-launch.md)
+
 ## Architecture
 
 ```
