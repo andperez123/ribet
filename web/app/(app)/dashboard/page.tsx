@@ -8,6 +8,7 @@ import { FindingsList } from "@/features/dashboard/FindingsList";
 import { HealthComponentsGrid } from "@/features/dashboard/HealthComponentsGrid";
 import { HealthScoreHero } from "@/features/dashboard/HealthScoreHero";
 import { HealthTrend } from "@/features/dashboard/HealthTrend";
+import { ImproveAnalysisPanel } from "@/features/dashboard/ImproveAnalysisPanel";
 import { SectorProgressPanel } from "@/features/dashboard/SectorProgressPanel";
 import { SnapshotKpiGrid } from "@/features/dashboard/SnapshotKpiGrid";
 import { UploadsTable } from "@/features/dashboard/UploadsTable";
@@ -25,6 +26,7 @@ export default async function DashboardPage({
     healthHistory,
     jobs,
     progress,
+    orgCoverage,
     snapshotLatest,
     snapshotHistory,
   ] = await Promise.all([
@@ -34,6 +36,7 @@ export default async function DashboardPage({
     serverData.healthHistory(12),
     serverData.ingestJobs(20),
     serverData.orgProgress(),
+    serverData.orgCoverage(),
     serverData.snapshotsLatest(),
     serverData.snapshotsHistory(12),
   ]);
@@ -116,6 +119,10 @@ export default async function DashboardPage({
 
       {healthHistory && healthHistory.snapshots.length > 1 && (
         <HealthTrend history={healthHistory} />
+      )}
+
+      {orgCoverage && (
+        <ImproveAnalysisPanel coverage={orgCoverage} />
       )}
 
       {progress && (

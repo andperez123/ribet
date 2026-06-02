@@ -44,6 +44,48 @@ class OrgProgressOut(BaseModel):
     coverage_count: int
 
 
+class CoverageItemOut(BaseModel):
+    key: str
+    label: str
+    sector: str
+    covered: bool
+    uploadable: bool
+
+
+class ConfidenceBreakdownOut(BaseModel):
+    key: str
+    label: str
+    weight: int
+    covered: bool
+
+
+class NextUploadOut(BaseModel):
+    key: str
+    label: str
+    confidence_if_uploaded: int
+
+
+class DataGapOut(BaseModel):
+    id: str
+    gap_type: str
+    reason: str
+    recommended_uploads: list[str] = Field(default_factory=list)
+    requested_report_types: list[str] = Field(default_factory=list)
+    requested_sector: str | None = None
+    confidence_if_uploaded: int | None = None
+    priority: str = "medium"
+    status: str = "open"
+
+
+class OrgCoverageOut(BaseModel):
+    understood: list[CoverageItemOut]
+    needed: list[CoverageItemOut]
+    analysis_confidence: int
+    confidence_breakdown: list[ConfidenceBreakdownOut]
+    next_upload: NextUploadOut | None = None
+    gaps: list[DataGapOut] = Field(default_factory=list)
+
+
 class UploadJobsResponse(BaseModel):
     jobs: list[UploadJob]
 

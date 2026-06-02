@@ -1,5 +1,6 @@
 import { OrgResolutionError, getFastApiBase, getProxyHeaders } from "./bff";
 import type { OrgProgress } from "@/lib/sectors";
+import type { OrgCoverage } from "@/lib/types/coverage";
 import type {
   Finding,
   HealthHistory,
@@ -49,6 +50,7 @@ export const serverData = {
     fetchApi<IngestJobsResponse>(`/v1/ingest/jobs?limit=${limit}`),
   weeklyBrief: () => fetchApi<WeeklyBrief>("/v1/brief/weekly"),
   orgProgress: () => fetchApi<OrgProgress>("/v1/org/progress"),
+  orgCoverage: () => fetchApi<OrgCoverage>("/v1/org/coverage"),
   snapshotsLatest: () =>
     fetchApi<import("@/lib/types/snapshot").OperationalSnapshotOut>(
       "/v1/snapshots/latest"

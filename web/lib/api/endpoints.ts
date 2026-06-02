@@ -19,6 +19,8 @@ export const API = {
   },
   org: {
     progress: "/v1/org/progress",
+    coverage: "/v1/org/coverage",
+    gaps: "/v1/org/gaps",
   },
   chat: {
     query: "/v1/chat/query",
@@ -42,4 +44,5 @@ export const BFF = {
   healthHistory: "/api/health/history",
   briefWeekly: "/api/brief/weekly",
   orgProgress: "/api/org/progress",
+  orgCoverage: "/api/org/coverage",
 } as const;

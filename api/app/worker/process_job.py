@@ -14,7 +14,7 @@ from app.services.transforms.pipeline import transform_upload
 from app.services.events import emit_event
 from app.services.telemetry import track_stage
 from app.services.progress import recompute_org_progress
-from app.services.report import generate_report
+from app.services.analysis import run_operational_analysis
 
 logging.basicConfig(
     level=logging.INFO,
@@ -100,18 +100,18 @@ def process_job(db, job: IngestJob) -> None:
 
         with track_stage(
             db,
-            "report",
+            "analysis",
             org_id=org.id,
             job_id=job.id,
             extra={"report_type": result.report_type, "row_count": result.row_count},
         ):
-            report = generate_report(db, org.id, [job.id], period=result.period)
+            analysis = run_operational_analysis(db, org.id, job.id, period=result.period)
+        report = analysis.report
         job.report_id = report.id
         job.status = "done"
         job.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(job)
-        recompute_org_progress(db, org.id)
         emit_event(
             db,
             "job_done",

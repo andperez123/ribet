@@ -181,6 +181,26 @@ class ProductEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class DataGapRequest(Base):
+    __tablename__ = "data_gap_requests"
+    __table_args__ = (Index("ix_data_gap_org_status", "org_id", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
+    gap_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    recommended_uploads: Mapped[list] = mapped_column(JsonColumn, default=list)
+    requested_report_types: Mapped[list] = mapped_column(JsonColumn, default=list)
+    requested_sector: Mapped[Optional[str]] = mapped_column(String(32))
+    confidence_if_uploaded: Mapped[Optional[int]] = mapped_column(Integer)
+    priority: Mapped[str] = mapped_column(String(16), default="medium")
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class BenchmarkCohort(Base):
     __tablename__ = "benchmark_cohorts"
 

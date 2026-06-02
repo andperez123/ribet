@@ -6,8 +6,9 @@ from app.deps import get_organization, verify_api_key
 from app.models import Organization
 from pydantic import BaseModel, Field
 
-from app.schemas import DemoOrgResponse, OrgProgressOut, UploadJob
+from app.schemas import DataGapOut, DemoOrgResponse, OrgCoverageOut, OrgProgressOut, UploadJob
 from app.services.demo import create_demo_organization
+from app.services.org_coverage import build_org_coverage_payload
 from app.services.progress import get_org_progress
 
 router = APIRouter(prefix="/v1/org", tags=["org"])
@@ -45,6 +46,26 @@ def org_progress(
 ):
     data = get_org_progress(db, org.id)
     return OrgProgressOut(**data)
+
+
+@router.get("/coverage", response_model=OrgCoverageOut)
+def org_coverage(
+    org: Organization = Depends(get_organization),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_api_key),
+):
+    data = build_org_coverage_payload(db, org.id)
+    return OrgCoverageOut(**data)
+
+
+@router.get("/gaps", response_model=list[DataGapOut])
+def org_gaps(
+    org: Organization = Depends(get_organization),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_api_key),
+):
+    data = build_org_coverage_payload(db, org.id)
+    return [DataGapOut(**g) for g in data["gaps"]]
 
 
 class OrgSettingsOut(BaseModel):

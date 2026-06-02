@@ -14,6 +14,7 @@ from app.models import Organization
 from app.services.narrator import narrate_findings_batch
 from app.services.telemetry import track_stage
 from app.services.rules.runner import RuleFinding, run_rules, run_snapshot_delta_rules
+from app.services.rules.cross_sector import run_cross_sector_rules
 from app.services.transforms.snapshot import (
     build_operational_snapshot,
     get_prior_snapshot as get_prior_op_snapshot,
@@ -88,6 +89,8 @@ def generate_report(
     )
     with track_stage(db, "rules_delta", org_id=org_id, job_id=job_id):
         findings.extend(run_snapshot_delta_rules(db, org_id))
+    with track_stage(db, "rules_cross_sector", org_id=org_id, job_id=job_id):
+        findings.extend(run_cross_sector_rules(db, org_id, op_snap, findings))
     upsert_memory(db, org_id, findings)
     trends = list(trends) + snapshot_delta_strings(op_snap, prior_op)
 
