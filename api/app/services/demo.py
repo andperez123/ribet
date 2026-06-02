@@ -8,7 +8,25 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import IngestJob, Organization
+from app.models import (
+    Customer,
+    DataGapRequest,
+    GlTransaction,
+    HealthSnapshot,
+    IngestJob,
+    InventoryItem,
+    Invoice,
+    OperationalFinding,
+    OperationalMemory,
+    OperationalReport,
+    OperationalSnapshot,
+    OrgBenchmarkEligibility,
+    Organization,
+    OrgProgress,
+    ProductEvent,
+    Vendor,
+)
+from app.seed import DEMO_ORG_B_ID, DEMO_ORG_ID
 from app.services.events import emit_event
 from app.services.ingest import validate_file
 from app.services.sectors import validate_sector
@@ -92,21 +110,47 @@ def create_demo_organization(db: Session) -> tuple[Organization, list[IngestJob]
     return org, jobs
 
 
-def purge_old_demo_orgs(db: Session, max_age_hours: int = 24) -> int:
-    """Delete demo orgs older than max_age_hours. Returns count deleted."""
-    from datetime import datetime, timedelta, timezone
-
+def _delete_org_cascade(db: Session, org_id: uuid.UUID) -> None:
+    """Remove an org and all dependent rows (FK-safe order)."""
     from sqlalchemy import delete
 
+    oid = org_id
+    db.execute(delete(OperationalFinding).where(OperationalFinding.org_id == oid))
+    db.execute(delete(HealthSnapshot).where(HealthSnapshot.org_id == oid))
+    db.execute(delete(ProductEvent).where(ProductEvent.org_id == oid))
+    db.execute(delete(DataGapRequest).where(DataGapRequest.org_id == oid))
+    db.execute(delete(OperationalMemory).where(OperationalMemory.org_id == oid))
+    db.execute(delete(OperationalSnapshot).where(OperationalSnapshot.org_id == oid))
+    db.execute(delete(OrgProgress).where(OrgProgress.org_id == oid))
+    db.execute(delete(OrgBenchmarkEligibility).where(OrgBenchmarkEligibility.org_id == oid))
+    db.execute(delete(Customer).where(Customer.org_id == oid))
+    db.execute(delete(Vendor).where(Vendor.org_id == oid))
+    db.execute(delete(GlTransaction).where(GlTransaction.org_id == oid))
+    db.execute(delete(Invoice).where(Invoice.org_id == oid))
+    db.execute(delete(InventoryItem).where(InventoryItem.org_id == oid))
+    db.execute(delete(OperationalReport).where(OperationalReport.org_id == oid))
+    db.execute(delete(IngestJob).where(IngestJob.org_id == oid))
+    db.execute(delete(Organization).where(Organization.id == oid))
+
+
+def purge_old_demo_orgs(db: Session, max_age_hours: int = 24) -> int:
+    """Delete ephemeral demo orgs older than max_age_hours. Returns count deleted."""
+    from datetime import datetime, timedelta, timezone
+
     cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    protected = {DEMO_ORG_ID, DEMO_ORG_B_ID}
     old_orgs = (
         db.query(Organization)
-        .filter(Organization.name.like("Demo %"), Organization.created_at < cutoff)
+        .filter(
+            Organization.name.like("Demo %"),
+            Organization.created_at < cutoff,
+            Organization.id.notin_(protected),
+        )
         .all()
     )
     count = 0
     for org in old_orgs:
-        db.delete(org)
+        _delete_org_cascade(db, org.id)
         count += 1
     if count:
         db.commit()

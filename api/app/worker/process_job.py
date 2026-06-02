@@ -176,11 +176,15 @@ def run_worker():
 
             now = _time.time()
             if now - last_purge > 3600:
-                from app.services.demo import purge_old_demo_orgs
+                try:
+                    from app.services.demo import purge_old_demo_orgs
 
-                n = purge_old_demo_orgs(db)
-                if n:
-                    logger.info("demo_orgs_purged count=%s", n)
+                    n = purge_old_demo_orgs(db)
+                    if n:
+                        logger.info("demo_orgs_purged count=%s", n)
+                except Exception as exc:
+                    logger.warning("demo_purge_failed error=%s", exc)
+                    db.rollback()
                 last_purge = now
 
             job = claim_job(db)
