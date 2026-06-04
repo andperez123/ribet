@@ -73,11 +73,22 @@ def narrate_findings_batch(
     if settings.ribet_narration.lower() != "on" or not settings.openai_api_key:
         return NarrationResult(skipped=True)
 
+    digest_has_content = digest is not None and (
+        getattr(digest, "ar_total", 0) > 0
+        or getattr(digest, "ar_invoice_count", 0) > 0
+        or getattr(digest, "ap_total", 0) > 0
+        or getattr(digest, "vendor_count", 0) > 0
+        or getattr(digest, "gl_txn_count", 0) > 0
+        or getattr(digest, "inventory_item_count", 0) > 0
+    )
+
     ranked = sorted(
         findings,
         key=lambda f: SEVERITY_RANK.get(f.severity, 0),
         reverse=True,
     )[:max_findings]
+
+    digest_only = not ranked and digest_has_content
 
     payload = []
     for i, f in enumerate(ranked):
@@ -110,15 +121,27 @@ def narrate_findings_batch(
         "You are an operational analyst for an SMB manufacturer, writing for the controller. "
         "You are given a full data digest (AR/AP/GL/inventory aggregates and top-N breakdowns) "
         "plus deterministic findings. Reason over the digest numbers directly. "
-        "For each finding, write an 80-120 word narrative citing specific numbers and one concrete "
-        "recommendation. Also write a 3-5 sentence executive summary that synthesizes the biggest "
-        "dollar exposures and risks across the whole digest (not just the findings), quantifying each. "
-        "Then list 2-4 short, specific questions management should answer to resolve uncertainty. "
-        "Use ONLY numbers present in the provided data; do not invent figures or unsupported findings; "
-        "if a conclusion is uncertain, phrase it as a management question. Return JSON: "
-        '{"executive_summary":"...","management_questions":["..."],'
-        '"narratives":[{"fingerprint":"...","narrative":"...","recommendation":"..."}]}'
     )
+    if digest_only:
+        system += (
+            "There are no rule findings this period. Write a 3-5 sentence executive summary "
+            "synthesizing the biggest dollar exposures and operational signals across the digest, "
+            "quantifying each. Highlight what looks normal vs what warrants monitoring. "
+            "Then list 2-4 short, specific questions management should answer. "
+            "Return JSON: "
+            '{"executive_summary":"...","management_questions":["..."],"narratives":[]}'
+        )
+    else:
+        system += (
+            "For each finding, write an 80-120 word narrative citing specific numbers and one concrete "
+            "recommendation. Also write a 3-5 sentence executive summary that synthesizes the biggest "
+            "dollar exposures and risks across the whole digest (not just the findings), quantifying each. "
+            "Then list 2-4 short, specific questions management should answer to resolve uncertainty. "
+            "Use ONLY numbers present in the provided data; do not invent figures or unsupported findings; "
+            "if a conclusion is uncertain, phrase it as a management question. Return JSON: "
+            '{"executive_summary":"...","management_questions":["..."],'
+            '"narratives":[{"fingerprint":"...","narrative":"...","recommendation":"..."}]}'
+        )
     user = json.dumps(
         {
             "org": org_name,

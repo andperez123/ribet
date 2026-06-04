@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -10,11 +10,14 @@ from app.deps import get_organization, verify_api_key
 from app.models import OperationalFinding, OperationalReport, Organization
 from app.schemas import FindingOut, OperationalReportOut, ReportSummary, ReportsListResponse
 from app.services.pdf_export import render_report_pdf
+from app.services.report_insights import hydrate_report_insights, serialize_insights_for_api
 
 router = APIRouter(prefix="/v1", tags=["reports"])
 
 
-def _report_to_out(r: OperationalReport) -> OperationalReportOut:
+def _report_to_out(db: Session, r: OperationalReport) -> OperationalReportOut:
+    bundle = hydrate_report_insights(db, r)
+    insight_fields = serialize_insights_for_api(bundle)
     return OperationalReportOut(
         id=r.id,
         org_id=r.org_id,
@@ -27,6 +30,12 @@ def _report_to_out(r: OperationalReport) -> OperationalReportOut:
         health_score=r.health_score,
         health_status=r.health_status,
         generated_at=r.generated_at.isoformat() if r.generated_at else "",
+        data_digest=insight_fields["data_digest"],
+        domain_insights=insight_fields["domain_insights"],
+        data_coverage=insight_fields["data_coverage"],
+        analysis_metadata=insight_fields["analysis_metadata"],
+        analyst_summary=r.analyst_summary,
+        management_questions=r.management_questions or [],
     )
 
 
@@ -78,7 +87,7 @@ def get_latest_report(
     )
     if not report:
         raise HTTPException(status_code=404, detail="No reports yet")
-    return _report_to_out(report)
+    return _report_to_out(db, report)
 
 
 @router.get("/reports/{report_id}/pdf")
@@ -108,7 +117,7 @@ def get_report(
     report = db.get(OperationalReport, report_id)
     if not report or report.org_id != org.id:
         raise HTTPException(status_code=404, detail="Report not found")
-    return _report_to_out(report)
+    return _report_to_out(db, report)
 
 
 @router.get("/findings", response_model=list[FindingOut])
@@ -117,14 +126,12 @@ def list_findings(
     db: Session = Depends(get_db),
     _: None = Depends(verify_api_key),
     limit: int = 50,
+    report_id: UUID | None = Query(default=None),
 ):
-    rows = (
-        db.query(OperationalFinding)
-        .filter(OperationalFinding.org_id == org.id)
-        .order_by(OperationalFinding.detected_at.desc())
-        .limit(limit)
-        .all()
-    )
+    q = db.query(OperationalFinding).filter(OperationalFinding.org_id == org.id)
+    if report_id is not None:
+        q = q.filter(OperationalFinding.report_id == report_id)
+    rows = q.order_by(OperationalFinding.detected_at.desc()).limit(limit).all()
     return [
         FindingOut(
             id=f.id,

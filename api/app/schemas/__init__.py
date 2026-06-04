@@ -5,6 +5,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.insights import (
+    AnalysisMetadataOut,
+    DataCoverageOut,
+    DataDigestOut,
+    DomainInsightOut,
+)
+
 
 UploadStatus = Literal["pending", "processing", "done", "error"]
 Severity = Literal["low", "medium", "high", "critical"]
@@ -149,6 +156,12 @@ class OperationalReportOut(BaseModel):
     health_score: int
     health_status: str
     generated_at: str
+    data_digest: DataDigestOut = Field(default_factory=DataDigestOut)
+    domain_insights: list[DomainInsightOut] = Field(default_factory=list)
+    data_coverage: DataCoverageOut = Field(default_factory=DataCoverageOut)
+    analysis_metadata: AnalysisMetadataOut = Field(default_factory=AnalysisMetadataOut)
+    analyst_summary: str | None = None
+    management_questions: list[str] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

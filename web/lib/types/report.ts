@@ -1,5 +1,63 @@
 export type Severity = "low" | "medium" | "high" | "critical" | string;
 
+export type InsightSeverity = "info" | "watch" | "alert";
+
+export type TopEntry = {
+  label: string;
+  amount: number;
+  pct: number;
+  detail?: string;
+};
+
+export type DataDigest = {
+  ar_total: number;
+  ar_over_90: number;
+  ar_over_90_pct: number;
+  ar_invoice_count: number;
+  top_customers: TopEntry[];
+
+  ap_total: number;
+  ap_negative_total: number;
+  vendor_count: number;
+  top_vendors: TopEntry[];
+
+  gl_txn_count: number;
+  gl_adjustment_total: number;
+  gl_unmapped_count: number;
+
+  inventory_item_count: number;
+  inventory_total_qty: number;
+  inventory_negative_count: number;
+  inventory_zero_count: number;
+  inventory_orphan_count: number;
+};
+
+export type DomainInsight = {
+  domain: string;
+  title: string;
+  body: string;
+  severity: InsightSeverity;
+  metric_label?: string | null;
+  metric_value?: string | null;
+  finding_type?: string | null;
+};
+
+export type DataCoverage = {
+  ar: boolean;
+  ap: boolean;
+  gl: boolean;
+  inventory: boolean;
+};
+
+export type AnalysisMetadata = {
+  narration: "completed" | "skipped" | "failed" | "legacy";
+  model?: string | null;
+  finding_count: number;
+  narrated_count: number;
+  data_domains_present: string[];
+  duration_ms?: number | null;
+};
+
 export type ReportFinding = {
   finding_type?: string;
   title: string;
@@ -10,6 +68,8 @@ export type ReportFinding = {
   department?: string;
   category?: string;
   suggested_action?: string;
+  narrative?: string | null;
+  recommendation?: string | null;
   fingerprint?: string;
 };
 
@@ -25,6 +85,12 @@ export type OperationalReport = {
   health_score: number;
   health_status: string;
   generated_at: string;
+  data_digest?: DataDigest;
+  domain_insights?: DomainInsight[];
+  data_coverage?: DataCoverage;
+  analysis_metadata?: AnalysisMetadata;
+  analyst_summary?: string | null;
+  management_questions?: string[];
 };
 
 export type Finding = {

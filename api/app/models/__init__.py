@@ -165,6 +165,12 @@ class OperationalReport(Base):
     trend_snapshot: Mapped[list] = mapped_column(JsonColumn, default=list)
     health_score: Mapped[int] = mapped_column(Integer, default=0)
     health_status: Mapped[str] = mapped_column(String(32), default="Stable")
+    data_digest: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
+    domain_insights: Mapped[Optional[list]] = mapped_column(JsonColumn, nullable=True)
+    data_coverage: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
+    analysis_metadata: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
+    analyst_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    management_questions: Mapped[Optional[list]] = mapped_column(JsonColumn, nullable=True)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

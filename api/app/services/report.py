@@ -6,16 +6,21 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import OperationalFinding, OperationalMemory, OperationalReport
+from app.models import OperationalFinding, OperationalMemory, OperationalReport, Organization
+from app.services.digest import (
+    build_data_coverage,
+    build_data_digest,
+    build_domain_insights,
+    build_executive_summary,
+)
 from app.services.events import emit_event
-from app.services.digest import build_data_digest, build_executive_summary
 from app.services.health import build_trend_snapshot, compute_health, get_prior_snapshot
 from app.services.memory import upsert_memory
-from app.models import Organization
 from app.services.narrator import narrate_findings_batch
-from app.services.telemetry import track_stage
-from app.services.rules.runner import RuleFinding, run_rules, run_snapshot_delta_rules
+from app.services.report_insights import validate_insights_invariant
 from app.services.rules.cross_sector import run_cross_sector_rules
+from app.services.rules.runner import RuleFinding, run_rules, run_snapshot_delta_rules
+from app.services.telemetry import track_stage
 from app.services.transforms.snapshot import (
     build_operational_snapshot,
     get_prior_snapshot as get_prior_op_snapshot,
@@ -55,6 +60,46 @@ def persist_findings(
         )
 
 
+def _merge_narratives_into_dicts(
+    finding_dicts: list[dict],
+    narratives: dict[str, dict[str, str]],
+) -> list[dict]:
+    merged: list[dict] = []
+    for d in finding_dicts:
+        row = dict(d)
+        extra = narratives.get(row.get("fingerprint", ""), {})
+        if extra.get("narrative"):
+            row["narrative"] = extra["narrative"]
+        if extra.get("recommendation"):
+            row["recommendation"] = extra["recommendation"]
+            row["suggested_action"] = extra["recommendation"]
+        merged.append(row)
+    return merged
+
+
+def _analysis_metadata_from_narration(
+    narration,
+    finding_count: int,
+    coverage: dict[str, bool],
+) -> dict:
+    domains = [k for k, v in coverage.items() if v]
+    if narration.skipped:
+        status = "skipped"
+    elif narration.failed:
+        status = "failed"
+    else:
+        status = "completed"
+    narrated = len([k for k in narration.narratives if k != "__executive__"])
+    return {
+        "narration": status,
+        "model": narration.model_name,
+        "finding_count": finding_count,
+        "narrated_count": narrated,
+        "data_domains_present": domains,
+        "duration_ms": narration.duration_ms or None,
+    }
+
+
 def generate_report(
     db: Session,
     org_id: UUID,
@@ -68,15 +113,9 @@ def generate_report(
     org = db.get(Organization, org_id)
     org_name = org.name if org else "Organization"
 
-    report = OperationalReport(
-        org_id=org_id, job_ids=[str(j) for j in job_ids]
-    )
+    report = OperationalReport(org_id=org_id, job_ids=[str(j) for j in job_ids])
     db.add(report)
     db.flush()
-
-    health_snap = compute_health(db, org_id, findings, report.id)
-    prior_health = get_prior_snapshot(db, org_id, exclude_id=health_snap.id)
-    trends = build_trend_snapshot(health_snap, prior_health, findings)
 
     period_label = period or datetime.now(timezone.utc).strftime("%Y-%m")
     prior_op = get_prior_op_snapshot(db, org_id, exclude_period=period_label)
@@ -85,17 +124,29 @@ def generate_report(
         org_id,
         period_label,
         job_ids[0] if job_ids else org_id,
-        health_snap.score,
-        health_snap.status,
+        100,
+        "Stable",
     )
+
     with track_stage(db, "rules_delta", org_id=org_id, job_id=job_id):
         findings.extend(run_snapshot_delta_rules(db, org_id))
     with track_stage(db, "rules_cross_sector", org_id=org_id, job_id=job_id):
         findings.extend(run_cross_sector_rules(db, org_id, op_snap, findings))
     upsert_memory(db, org_id, findings)
+
+    health_snap = compute_health(db, org_id, findings, report.id)
+    op_snap.health_score = health_snap.score
+    op_snap.health_status = health_snap.status
+
+    prior_health = get_prior_snapshot(db, org_id, exclude_id=health_snap.id)
+    trends = build_trend_snapshot(health_snap, prior_health, findings)
     trends = list(trends) + snapshot_delta_strings(op_snap, prior_op)
 
     digest = build_data_digest(db, org_id)
+    coverage = build_data_coverage(digest)
+    domain_insights = [i.to_dict() for i in build_domain_insights(digest, findings)]
+
+    validate_insights_invariant(digest.to_dict(), domain_insights)
 
     if settings.ribet_narration.lower() == "on" and settings.openai_api_key:
         emit_event(
@@ -136,9 +187,22 @@ def generate_report(
         db.commit()
     narratives = narration.narratives
 
-    financial = [f.to_dict() for f in findings if f.category == "financial"]
-    operational = [f.to_dict() for f in findings if f.category == "operational"]
-    risk = [f.to_dict() for f in findings if f.severity in ("high", "critical") or f.category == "risk"]
+    financial = _merge_narratives_into_dicts(
+        [f.to_dict() for f in findings if f.category == "financial"],
+        narratives,
+    )
+    operational = _merge_narratives_into_dicts(
+        [f.to_dict() for f in findings if f.category == "operational"],
+        narratives,
+    )
+    risk = _merge_narratives_into_dicts(
+        [
+            f.to_dict()
+            for f in findings
+            if f.severity in ("high", "critical") or f.category == "risk"
+        ],
+        narratives,
+    )
 
     recurring = (
         db.query(OperationalMemory)
@@ -156,13 +220,12 @@ def generate_report(
             }
         )
 
-    executive = build_executive_summary(digest, findings)
+    analyst_summary: str | None = None
     if narratives.get("__executive__"):
-        llm_exec = narratives["__executive__"].get("narrative")
-        if llm_exec:
-            executive = [llm_exec] + executive
-    for q in narration.management_questions:
-        executive.append(f"Question for management: {q}")
+        analyst_summary = narratives["__executive__"].get("narrative") or None
+
+    executive = build_executive_summary(digest, findings)
+    management_questions = list(narration.management_questions)
 
     severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
     seen_actions: set[str] = set()
@@ -181,6 +244,14 @@ def generate_report(
     report.trend_snapshot = trends
     report.health_score = health_snap.score
     report.health_status = health_snap.status
+    report.data_digest = digest.to_dict()
+    report.domain_insights = domain_insights
+    report.data_coverage = coverage
+    report.analysis_metadata = _analysis_metadata_from_narration(
+        narration, len(findings), coverage
+    )
+    report.analyst_summary = analyst_summary
+    report.management_questions = management_questions
 
     if job_ids:
         with track_stage(
@@ -206,6 +277,7 @@ def generate_report(
             "finding_count": len(findings),
             "narration_failed": narration.failed,
             "narration_ms": narration.duration_ms,
+            "data_domains": [k for k, v in coverage.items() if v],
         },
     )
     db.commit()

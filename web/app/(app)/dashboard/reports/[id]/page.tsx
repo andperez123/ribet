@@ -1,23 +1,83 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
+import { AnalystNarrativePanel } from "@/features/dashboard/AnalystNarrativePanel";
+import { DataCoverageBanner } from "@/features/dashboard/DataCoverageBanner";
+import { DataDigestKpiGrid } from "@/features/dashboard/DataDigestKpiGrid";
 import { HealthScoreHero } from "@/features/dashboard/HealthScoreHero";
+import { InsightCardsGrid } from "@/features/dashboard/InsightCardsGrid";
+import { ReportFindingsList } from "@/features/dashboard/ReportFindingsList";
 import { ReportSections } from "@/features/dashboard/ReportSections";
+import { TopEntitiesPanel } from "@/features/dashboard/TopEntitiesPanel";
 import { WeeklyBriefPanel } from "@/features/dashboard/WeeklyBriefPanel";
-import { formatDate, healthStatusColor } from "@/lib/dashboard/utils";
 import { serverData } from "@/lib/api/server-data";
+import { digestHasData, formatDate, healthStatusColor } from "@/lib/dashboard/utils";
+import type {
+  AnalysisMetadata,
+  DataCoverage,
+  DataDigest,
+  DomainInsight,
+} from "@/lib/types/report";
 
 type Props = { params: Promise<{ id: string }> };
 
+const EMPTY_DIGEST: DataDigest = {
+  ar_total: 0,
+  ar_over_90: 0,
+  ar_over_90_pct: 0,
+  ar_invoice_count: 0,
+  top_customers: [],
+  ap_total: 0,
+  ap_negative_total: 0,
+  vendor_count: 0,
+  top_vendors: [],
+  gl_txn_count: 0,
+  gl_adjustment_total: 0,
+  gl_unmapped_count: 0,
+  inventory_item_count: 0,
+  inventory_total_qty: 0,
+  inventory_negative_count: 0,
+  inventory_zero_count: 0,
+  inventory_orphan_count: 0,
+};
+
+const EMPTY_COVERAGE: DataCoverage = {
+  ar: false,
+  ap: false,
+  gl: false,
+  inventory: false,
+};
+
+const EMPTY_METADATA: AnalysisMetadata = {
+  narration: "legacy",
+  finding_count: 0,
+  narrated_count: 0,
+  data_domains_present: [],
+};
+
 export default async function ReportPage({ params }: Props) {
   const { id } = await params;
-  const [report, brief, healthScore] = await Promise.all([
+  const [report, brief, healthScore, findings] = await Promise.all([
     serverData.report(id),
-    serverData.weeklyBrief(),
+    serverData.weeklyBrief(id),
     serverData.healthScore(),
+    serverData.findings(50, id),
   ]);
 
   if (!report) notFound();
+
+  const digest = report.data_digest ?? EMPTY_DIGEST;
+  const coverage = report.data_coverage ?? EMPTY_COVERAGE;
+  const insights: DomainInsight[] = report.domain_insights ?? [];
+  const metadata = report.analysis_metadata ?? EMPTY_METADATA;
+  const hasData = digestHasData(digest);
+
+  if (hasData && insights.length === 0) {
+    console.error(
+      `[report-page] Insight invariant: digest has data but domain_insights is empty (report ${id})`
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -42,12 +102,48 @@ export default async function ReportPage({ params }: Props) {
 
       {healthScore && <HealthScoreHero score={healthScore} />}
 
-      <div className="grid gap-8 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <ReportSections report={report} />
-        </div>
-        <div>{brief && <WeeklyBriefPanel brief={brief} />}</div>
-      </div>
+      <DataCoverageBanner coverage={coverage} />
+
+      {!hasData && (
+        <Card className="border-dashed">
+          <p className="text-sm text-ribet-muted">
+            {report.executive_summary[0] ??
+              "Upload AR, AP, GL, or inventory exports to generate operational insights."}
+          </p>
+          <Link
+            href="/#upload"
+            className="mt-4 inline-block text-sm font-medium text-ribet-green hover:opacity-90"
+          >
+            Upload files →
+          </Link>
+        </Card>
+      )}
+
+      {hasData && (
+        <>
+          <DataDigestKpiGrid digest={digest} coverage={coverage} />
+
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <AnalystNarrativePanel
+                analystSummary={report.analyst_summary}
+                managementQuestions={report.management_questions}
+                metadata={metadata}
+                executiveSummary={report.executive_summary}
+              />
+            </div>
+            <div>{brief && <WeeklyBriefPanel brief={brief} />}</div>
+          </div>
+
+          <InsightCardsGrid insights={insights} />
+
+          <TopEntitiesPanel digest={digest} coverage={coverage} />
+        </>
+      )}
+
+      <ReportFindingsList findings={findings ?? []} />
+
+      <ReportSections report={report} />
     </div>
   );
 }

@@ -41,14 +41,20 @@ export const serverData = {
     fetchApi<import("@/lib/types/report").ReportsListResponse>(
       `/v1/reports?limit=${limit}`
     ),
-  findings: (limit = 50) =>
-    fetchApi<Finding[]>(`/v1/findings?limit=${limit}`),
+  findings: (limit = 50, reportId?: string) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (reportId) params.set("report_id", reportId);
+    return fetchApi<Finding[]>(`/v1/findings?${params}`);
+  },
   healthScore: () => fetchApi<HealthScore>("/v1/health/score"),
   healthHistory: (limit = 12) =>
     fetchApi<HealthHistory>(`/v1/health/history?limit=${limit}`),
   ingestJobs: (limit = 20) =>
     fetchApi<IngestJobsResponse>(`/v1/ingest/jobs?limit=${limit}`),
-  weeklyBrief: () => fetchApi<WeeklyBrief>("/v1/brief/weekly"),
+  weeklyBrief: (reportId?: string) => {
+    const q = reportId ? `?report_id=${reportId}` : "";
+    return fetchApi<WeeklyBrief>(`/v1/brief/weekly${q}`);
+  },
   orgProgress: () => fetchApi<OrgProgress>("/v1/org/progress"),
   orgCoverage: () => fetchApi<OrgCoverage>("/v1/org/coverage"),
   snapshotsLatest: () =>

@@ -151,37 +151,235 @@ def build_data_digest(db: Session, org_id: UUID, top_n: int = 5) -> DataDigest:
     return digest
 
 
-def build_executive_summary(digest: DataDigest, findings, max_items: int = 6) -> list[str]:
-    """Synthesize a quantified executive summary from the digest + findings.
+def build_data_coverage(digest: DataDigest) -> dict[str, bool]:
+    return {
+        "ar": digest.ar_total > 0 or digest.ar_invoice_count > 0,
+        "ap": digest.ap_total > 0 or digest.vendor_count > 0,
+        "gl": digest.gl_txn_count > 0,
+        "inventory": digest.inventory_item_count > 0,
+    }
 
-    Unlike the old behavior (top-5 finding titles), this surfaces the largest
-    dollar exposures and material data-integrity issues with concrete numbers.
-    """
+
+def digest_has_data(digest: DataDigest) -> bool:
+    return any(build_data_coverage(digest).values())
+
+
+@dataclass
+class DomainInsight:
+    domain: str
+    title: str
+    body: str
+    severity: str
+    metric_label: str | None = None
+    metric_value: str | None = None
+    finding_type: str | None = None
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+_FINDING_DOMAIN: dict[str, str] = {
+    "ar_aging_spike": "ar",
+    "customer_concentration": "ar",
+    "duplicate_customers": "ar",
+    "invalid_aging_buckets": "ar",
+    "ap_negative_balance": "ap",
+    "vendor_concentration": "ap",
+    "vendor_name_concentration": "ap",
+    "inconsistent_vendor_naming": "ap",
+    "duplicate_vendors": "ap",
+    "inventory_adjustment_spike": "inventory",
+    "orphan_inventory": "inventory",
+    "negative_inventory": "inventory",
+    "zero_or_dead_stock": "inventory",
+    "missing_gl_mappings": "gl",
+    "operational_cash_pressure": "risk",
+}
+
+
+def _finding_severity_to_insight(severity: str) -> str:
+    if severity in ("critical", "high"):
+        return "alert"
+    if severity == "medium":
+        return "watch"
+    return "info"
+
+
+def build_domain_insights(digest: DataDigest, findings) -> list[DomainInsight]:
+    """Always-on insight cards from digest + rule findings."""
+    insights: list[DomainInsight] = []
+    seen_fingerprints: set[str] = set()
+
+    if digest.ar_total > 0 or digest.ar_invoice_count > 0:
+        ar_sev = "watch" if digest.ar_over_90_pct >= 10 else "info"
+        if digest.ar_over_90_pct >= 15:
+            ar_sev = "alert"
+        insights.append(
+            DomainInsight(
+                domain="ar",
+                title="Accounts receivable",
+                body=(
+                    f"${digest.ar_total:,.0f} across {digest.ar_invoice_count} invoice(s); "
+                    f"${digest.ar_over_90:,.0f} ({digest.ar_over_90_pct:.1f}%) is over 90 days."
+                ),
+                severity=ar_sev,
+                metric_label="AR over 90",
+                metric_value=f"{digest.ar_over_90_pct:.1f}%",
+            )
+        )
+        for tc in digest.top_customers[:3]:
+            insights.append(
+                DomainInsight(
+                    domain="ar",
+                    title=f"Customer: {tc.label}",
+                    body=f"${tc.amount:,.0f} ({tc.pct:.1f}% of total receivables).",
+                    severity="watch" if tc.pct >= 25 else "info",
+                    metric_label="Share of AR",
+                    metric_value=f"{tc.pct:.1f}%",
+                )
+            )
+
+    if digest.ap_total > 0 or digest.vendor_count > 0:
+        top_pct = digest.top_vendors[0].pct if digest.top_vendors else 0.0
+        ap_sev = "alert" if top_pct >= 40 else ("watch" if top_pct >= 30 else "info")
+        insights.append(
+            DomainInsight(
+                domain="ap",
+                title="Accounts payable",
+                body=(
+                    f"${digest.ap_total:,.0f} open across {digest.vendor_count} vendor record(s)."
+                    + (
+                        f" ${abs(digest.ap_negative_total):,.0f} in negative balances."
+                        if digest.ap_negative_total < 0
+                        else ""
+                    )
+                ),
+                severity=ap_sev,
+                metric_label="Open AP",
+                metric_value=f"${digest.ap_total:,.0f}",
+            )
+        )
+        for tv in digest.top_vendors[:3]:
+            detail_note = f" {tv.detail}." if tv.detail else "."
+            insights.append(
+                DomainInsight(
+                    domain="ap",
+                    title=f"Vendor: {tv.label}",
+                    body=f"${tv.amount:,.0f} ({tv.pct:.1f}% of open AP).{detail_note}",
+                    severity="watch" if tv.pct >= 30 else "info",
+                    metric_label="Share of AP",
+                    metric_value=f"{tv.pct:.1f}%",
+                )
+            )
+
+    if digest.gl_txn_count > 0:
+        gl_sev = "info"
+        if digest.gl_unmapped_count or digest.gl_adjustment_total >= 5000:
+            gl_sev = "watch"
+        insights.append(
+            DomainInsight(
+                domain="gl",
+                title="General ledger",
+                body=(
+                    f"{digest.gl_txn_count} transaction(s); "
+                    f"${digest.gl_adjustment_total:,.0f} in adjustment activity."
+                    + (
+                        f" {digest.gl_unmapped_count} unmapped entry(ies)."
+                        if digest.gl_unmapped_count
+                        else ""
+                    )
+                ),
+                severity=gl_sev,
+                metric_label="GL transactions",
+                metric_value=str(digest.gl_txn_count),
+            )
+        )
+
+    if digest.inventory_item_count > 0:
+        integrity = (
+            digest.inventory_negative_count
+            + digest.inventory_orphan_count
+            + digest.inventory_zero_count
+        )
+        inv_sev = "watch" if integrity else "info"
+        if digest.inventory_negative_count:
+            inv_sev = "alert"
+        insights.append(
+            DomainInsight(
+                domain="inventory",
+                title="Inventory",
+                body=(
+                    f"{digest.inventory_item_count} item(s); "
+                    f"{digest.inventory_total_qty:,.0f} total units on hand."
+                    + (
+                        f" {digest.inventory_negative_count} negative, "
+                        f"{digest.inventory_zero_count} at zero, "
+                        f"{digest.inventory_orphan_count} unmapped."
+                        if integrity
+                        else " No integrity issues detected."
+                    )
+                ),
+                severity=inv_sev,
+                metric_label="Items tracked",
+                metric_value=str(digest.inventory_item_count),
+            )
+        )
+
+    for f in findings:
+        fp = getattr(f, "fingerprint", None) or f"{f.finding_type}:{f.title}"
+        if fp in seen_fingerprints:
+            continue
+        seen_fingerprints.add(fp)
+        domain = _FINDING_DOMAIN.get(f.finding_type, getattr(f, "category", "operational"))
+        insights.append(
+            DomainInsight(
+                domain=domain,
+                title=f.title,
+                body=f.detail,
+                severity=_finding_severity_to_insight(f.severity),
+                finding_type=f.finding_type,
+            )
+        )
+
+    return insights
+
+
+def build_executive_summary(digest: DataDigest, findings, max_items: int = 8) -> list[str]:
+    """Deterministic executive bullets from digest + findings (no LLM text)."""
     lines: list[str] = []
 
-    if digest.ar_total > 0:
+    if digest.ar_total > 0 or digest.ar_invoice_count > 0:
         lines.append(
             f"Total receivables of ${digest.ar_total:,.0f} across {digest.ar_invoice_count} "
-            f"invoice(s); ${digest.ar_over_90:,.0f} ({digest.ar_over_90_pct:.0f}%) is over 90 days."
+            f"invoice(s); ${digest.ar_over_90:,.0f} ({digest.ar_over_90_pct:.1f}%) is over 90 days."
         )
     if digest.top_customers:
         tc = digest.top_customers[0]
-        if tc.pct >= 20:
-            lines.append(
-                f"{tc.label} is the largest receivable at ${tc.amount:,.0f} ({tc.pct:.0f}% of AR)."
-            )
+        lines.append(
+            f"Largest customer {tc.label} at ${tc.amount:,.0f} ({tc.pct:.1f}% of AR)."
+        )
+    if digest.ap_total > 0 or digest.vendor_count > 0:
+        lines.append(
+            f"Open payables of ${digest.ap_total:,.0f} across {digest.vendor_count} vendor record(s)."
+        )
     if digest.top_vendors:
         tv = digest.top_vendors[0]
-        concentration_note = f" across {tv.detail}" if tv.detail else ""
-        if tv.pct >= 30:
-            lines.append(
-                f"Top supplier {tv.label} carries ${tv.amount:,.0f} of open AP "
-                f"({tv.pct:.0f}%){concentration_note}."
-            )
-    if digest.gl_adjustment_total > 0:
+        concentration_note = f" ({tv.detail})" if tv.detail else ""
         lines.append(
-            f"Inventory/GL adjustment activity totals ${digest.gl_adjustment_total:,.0f}."
+            f"Top supplier {tv.label} carries ${tv.amount:,.0f} of open AP "
+            f"({tv.pct:.1f}%){concentration_note}."
         )
+    if digest.gl_txn_count > 0:
+        lines.append(
+            f"General ledger: {digest.gl_txn_count} transaction(s); "
+            f"${digest.gl_adjustment_total:,.0f} in adjustment activity."
+        )
+    if digest.inventory_item_count > 0:
+        lines.append(
+            f"Inventory: {digest.inventory_item_count} item(s), "
+            f"{digest.inventory_total_qty:,.0f} total units on hand."
+        )
+
     integrity_bits = []
     if digest.inventory_negative_count:
         integrity_bits.append(f"{digest.inventory_negative_count} negative-stock item(s)")
@@ -194,10 +392,89 @@ def build_executive_summary(digest: DataDigest, findings, max_items: int = 6) ->
 
     crit = [f for f in findings if f.severity in ("critical", "high")]
     if crit:
-        lines.append(
-            f"{len(crit)} high-severity finding(s) require attention this period."
-        )
+        lines.append(f"{len(crit)} high-severity finding(s) require attention this period.")
 
     if not lines:
-        lines.append("No significant operational risks detected in current data.")
+        lines.append(
+            "No canonical financial data found for this org. "
+            "Upload AR/AP/GL/inventory exports to generate insights."
+        )
     return lines[:max_items]
+
+
+def build_weekly_brief_sections(
+    digest: DataDigest,
+    findings,
+    coverage: dict[str, bool],
+    trends: list[str] | None = None,
+) -> dict[str, list[str]]:
+    """Digest-driven weekly brief sections. Omits domains with no data."""
+    sections: dict[str, list[str]] = {}
+    finding_titles = {f.finding_type: f.title for f in findings}
+
+    if coverage.get("ar"):
+        items: list[str] = [
+            f"Receivables total ${digest.ar_total:,.0f}; "
+            f"{digest.ar_over_90_pct:.1f}% (${digest.ar_over_90:,.0f}) is over 90 days."
+        ]
+        if digest.ar_over_90_pct < 15:
+            items.append("AR aging is within the 15% alert threshold.")
+        for f in findings:
+            if f.business_impact == "cash_flow" or f.finding_type == "ar_aging_spike":
+                items.append(f.title)
+        sections["cash_position"] = items
+
+    if coverage.get("ap"):
+        items = [f"Open payables ${digest.ap_total:,.0f} across {digest.vendor_count} vendor(s)."]
+        if digest.ap_negative_total < 0:
+            items.append(f"${abs(digest.ap_negative_total):,.0f} in negative vendor balances.")
+        for f in findings:
+            if f.finding_type in ("ap_negative_balance", "inconsistent_vendor_naming", "duplicate_vendors"):
+                items.append(f.title)
+        sections["ap_aging"] = items
+
+    if coverage.get("ap") and digest.top_vendors:
+        tv = digest.top_vendors[0]
+        items = [f"Top vendor {tv.label} is {tv.pct:.1f}% of open AP (${tv.amount:,.0f})."]
+        if "vendor_concentration" in finding_titles or "vendor_name_concentration" in finding_titles:
+            for ft in ("vendor_concentration", "vendor_name_concentration"):
+                if ft in finding_titles:
+                    items.append(finding_titles[ft])
+        elif tv.pct < 40:
+            items.append("Vendor concentration is below the 40% alert threshold.")
+        sections["vendor_concentration"] = items
+
+    if coverage.get("gl") or coverage.get("inventory"):
+        items = []
+        if digest.gl_adjustment_total > 0:
+            items.append(f"GL adjustment activity totals ${digest.gl_adjustment_total:,.0f}.")
+        if digest.inventory_negative_count or digest.inventory_orphan_count:
+            items.append(
+                f"Inventory integrity: {digest.inventory_negative_count} negative, "
+                f"{digest.inventory_orphan_count} unmapped item(s)."
+            )
+        for f in findings:
+            if f.finding_type in (
+                "inventory_adjustment_spike",
+                "orphan_inventory",
+                "negative_inventory",
+                "zero_or_dead_stock",
+            ):
+                items.append(f.title)
+        if not items and coverage.get("inventory"):
+            items.append(
+                f"{digest.inventory_item_count} inventory item(s) tracked; "
+                "no adjustment or integrity alerts."
+            )
+        if items:
+            sections["inventory_adjustments"] = items
+
+    dup_items = [f.title for f in findings if "duplicate" in f.finding_type]
+    if dup_items:
+        sections["duplicate_invoices"] = dup_items
+
+    if trends:
+        sections["summary"] = trends[:3]
+
+    return sections
+
