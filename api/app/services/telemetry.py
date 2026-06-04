@@ -45,6 +45,7 @@ def track_stage(
         if err is not None:
             meta["error_type"] = type(err).__name__
             meta["error"] = str(err)[:500]
+            db.rollback()
             emit_event(
                 db,
                 f"{stage}_failed",

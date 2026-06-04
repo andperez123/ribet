@@ -138,6 +138,37 @@ curl -s https://<api-domain>/v1/admin/metrics \
 7. Set `CORS_ORIGINS` to your web public URL
 8. Visit `/admin/metrics?key=...` to confirm KPIs
 
+## Database migrations
+
+Migrations run automatically on **api** and **worker** startup (`alembic upgrade head` in `db_init.py`).
+
+After deploying schema changes, confirm in **api** or **worker** logs:
+
+```
+alembic_upgrade_complete
+```
+
+If you see `alembic_upgrade_failed`, run manually from the **api** service (same `DATABASE_URL` as worker):
+
+```bash
+railway run --service ribet alembic upgrade head
+```
+
+(Service name may differ — use your API service.)
+
+**Emergency SQL** (Postgres console) if Alembic cannot run:
+
+```sql
+ALTER TABLE operational_reports ADD COLUMN IF NOT EXISTS data_digest JSONB;
+ALTER TABLE operational_reports ADD COLUMN IF NOT EXISTS domain_insights JSONB;
+ALTER TABLE operational_reports ADD COLUMN IF NOT EXISTS data_coverage JSONB;
+ALTER TABLE operational_reports ADD COLUMN IF NOT EXISTS analysis_metadata JSONB;
+ALTER TABLE operational_reports ADD COLUMN IF NOT EXISTS analyst_summary TEXT;
+ALTER TABLE operational_reports ADD COLUMN IF NOT EXISTS management_questions JSONB;
+```
+
+Then **re-upload** any files whose jobs failed during the outage.
+
 ### Fix: "Failed to build an image" with Railpack at repo root
 
 Railway may show **Builder: Railpack** even when a Dockerfile exists. The repo now includes a **root `Dockerfile`** (builds the API) plus `railway.toml` and `railway.json` forcing Docker builds.

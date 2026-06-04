@@ -167,6 +167,9 @@ def _start_email_scheduler():
 
 def run_worker():
     logger.info("worker_started")
+    from app.db_init import initialize_database
+
+    initialize_database()
     _start_email_scheduler()
     last_purge = 0.0
     while True:
