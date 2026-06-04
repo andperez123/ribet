@@ -19,6 +19,7 @@ SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 @dataclass
 class NarrationResult:
     narratives: dict[str, dict[str, str]] = field(default_factory=dict)
+    management_questions: list[str] = field(default_factory=list)
     failed: bool = False
     skipped: bool = False
     duration_ms: int = 0
@@ -61,8 +62,14 @@ def narrate_findings_batch(
     snapshot: OperationalSnapshot | None = None,
     prior: OperationalSnapshot | None = None,
     max_findings: int = 15,
+    digest=None,
 ) -> NarrationResult:
-    """Returns narratives plus timing/token metadata for telemetry."""
+    """Returns narratives plus timing/token metadata for telemetry.
+
+    When a ``digest`` is supplied, the model also synthesizes an executive
+    summary over the full dataset (returned under the ``__executive__`` key),
+    so the LLM acts as the analyst rather than only rewording rule output.
+    """
     if settings.ribet_narration.lower() != "on" or not settings.openai_api_key:
         return NarrationResult(skipped=True)
 
@@ -100,13 +107,25 @@ def narrate_findings_batch(
         )
 
     system = (
-        "You are an operational analyst writing for an SMB manufacturing controller. "
-        "For each finding, write an 80-120 word narrative citing numbers from the detail, "
-        "and one concrete recommendation. Return JSON: "
-        '{"narratives":[{"fingerprint":"...","narrative":"...","recommendation":"..."}]}'
+        "You are an operational analyst for an SMB manufacturer, writing for the controller. "
+        "You are given a full data digest (AR/AP/GL/inventory aggregates and top-N breakdowns) "
+        "plus deterministic findings. Reason over the digest numbers directly. "
+        "For each finding, write an 80-120 word narrative citing specific numbers and one concrete "
+        "recommendation. Also write a 3-5 sentence executive summary that synthesizes the biggest "
+        "dollar exposures and risks across the whole digest (not just the findings), quantifying each. "
+        "Then list 2-4 short, specific questions management should answer to resolve uncertainty. "
+        "Use ONLY numbers present in the provided data; do not invent figures or unsupported findings; "
+        "if a conclusion is uncertain, phrase it as a management question. Return JSON: "
+        '{"executive_summary":"...","management_questions":["..."],'
+        '"narratives":[{"fingerprint":"...","narrative":"...","recommendation":"..."}]}'
     )
     user = json.dumps(
-        {"org": org_name, "context": context_lines, "findings": payload},
+        {
+            "org": org_name,
+            "context": context_lines,
+            "digest": digest.to_dict() if digest is not None else None,
+            "findings": payload,
+        },
         indent=0,
     )
 
@@ -149,6 +168,15 @@ def narrate_findings_batch(
                 "narrative": item.get("narrative", ""),
                 "recommendation": item.get("recommendation", ""),
             }
+    exec_summary = data.get("executive_summary")
+    if isinstance(exec_summary, str) and exec_summary.strip():
+        out["__executive__"] = {"narrative": exec_summary.strip(), "recommendation": ""}
+
+    questions = [
+        q.strip()
+        for q in (data.get("management_questions") or [])
+        if isinstance(q, str) and q.strip()
+    ]
 
     logger.info(
         "narration_ok duration_ms=%s model=%s tokens=%s findings=%s",
@@ -159,6 +187,7 @@ def narrate_findings_batch(
     )
     return NarrationResult(
         narratives=out,
+        management_questions=questions,
         duration_ms=duration_ms,
         model_name=model,
         token_usage=usage,

@@ -44,15 +44,23 @@ class RuleFinding:
 def run_rules(db: Session, org_id: UUID) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
     findings.extend(_check_ar_aging_spike(db, org_id))
+    findings.extend(_check_customer_concentration(db, org_id))
     findings.extend(_check_duplicate_customers(db, org_id))
     findings.extend(_check_ap_negative(db, org_id))
     findings.extend(_check_vendor_concentration(db, org_id))
+    findings.extend(_check_vendor_name_concentration(db, org_id))
     findings.extend(_check_inventory_adjustments(db, org_id))
     findings.extend(_check_orphan_inventory(db, org_id))
+    findings.extend(_check_negative_inventory(db, org_id))
+    findings.extend(_check_zero_or_dead_stock_signals(db, org_id))
     findings.extend(_check_missing_gl_mappings(db, org_id))
     findings.extend(_check_invalid_aging_buckets(db, org_id))
     findings.extend(_check_duplicate_vendors(db, org_id))
     return findings
+
+
+def _normalize_name(name: str | None) -> str:
+    return " ".join((name or "").lower().split())
 
 
 def run_snapshot_delta_rules(db: Session, org_id: UUID) -> list[RuleFinding]:
@@ -162,6 +170,49 @@ def _check_ar_aging_spike(db: Session, org_id: UUID) -> list[RuleFinding]:
     ]
 
 
+def _check_customer_concentration(db: Session, org_id: UUID) -> list[RuleFinding]:
+    rows = (
+        db.query(Invoice.customer_id, func.sum(Invoice.amount))
+        .filter(Invoice.org_id == org_id)
+        .group_by(Invoice.customer_id)
+        .all()
+    )
+    totals = [(cid, float(amt or 0)) for cid, amt in rows if (amt or 0) > 0]
+    if len(totals) < 3:
+        return []
+    grand_total = sum(amt for _, amt in totals)
+    if grand_total <= 0:
+        return []
+    top_cid, top_amt = max(totals, key=lambda x: x[1])
+    pct = (top_amt / grand_total) * 100
+    if pct < 25:
+        return []
+    name_row = (
+        db.query(Customer.name)
+        .filter(Customer.org_id == org_id, Customer.customer_id == top_cid)
+        .first()
+    )
+    name = (name_row[0] if name_row else None) or top_cid
+    return [
+        RuleFinding(
+            finding_type="customer_concentration",
+            title="Customer concentration risk",
+            detail=(
+                f"{name} represents {pct:.1f}% of total receivables "
+                f"(${top_amt:,.0f} of ${grand_total:,.0f})."
+            ),
+            severity="high" if pct >= 35 else "medium",
+            confidence=0.92,
+            business_impact="cash_flow",
+            department="finance",
+            category="risk",
+            suggested_action=(
+                f"Assess credit exposure to {name} and diversify the customer base."
+            ),
+        )
+    ]
+
+
 def _check_duplicate_customers(db: Session, org_id: UUID) -> list[RuleFinding]:
     dupes = (
         db.query(Customer.customer_id, func.count(Customer.id))
@@ -232,6 +283,51 @@ def _check_vendor_concentration(db: Session, org_id: UUID) -> list[RuleFinding]:
     ]
 
 
+def _check_vendor_name_concentration(db: Session, org_id: UUID) -> list[RuleFinding]:
+    """Combine vendors sharing a normalized name (same supplier, multiple IDs)."""
+    vendors = db.query(Vendor).filter(Vendor.org_id == org_id, Vendor.balance > 0).all()
+    if len(vendors) < 3:
+        return []
+    total = sum(v.balance or 0 for v in vendors)
+    if total <= 0:
+        return []
+    by_name: dict[str, dict] = {}
+    for v in vendors:
+        key = _normalize_name(v.name)
+        if not key:
+            continue
+        entry = by_name.setdefault(key, {"name": v.name, "balance": 0.0, "ids": set()})
+        entry["balance"] += v.balance or 0
+        entry["ids"].add(v.vendor_id)
+    if not by_name:
+        return []
+    top = max(by_name.values(), key=lambda e: e["balance"])
+    pct = (top["balance"] / total) * 100
+    # Only emit when combining IDs reveals concentration the single-row rule misses,
+    # i.e. the supplier spans multiple IDs and clears the threshold.
+    if len(top["ids"]) < 2 or pct < 40:
+        return []
+    return [
+        RuleFinding(
+            finding_type="vendor_name_concentration",
+            title="Hidden vendor concentration (duplicate vendor records)",
+            detail=(
+                f"{top['name']} spans {len(top['ids'])} vendor IDs "
+                f"({', '.join(sorted(top['ids']))}) totaling ${top['balance']:,.0f}, "
+                f"or {pct:.1f}% of open AP — concealed by split records."
+            ),
+            severity="high",
+            confidence=0.9,
+            business_impact="cash_flow",
+            department="purchasing",
+            category="risk",
+            suggested_action=(
+                f"Merge duplicate records for {top['name']} and treat combined exposure as one vendor."
+            ),
+        )
+    ]
+
+
 def _check_inventory_adjustments(db: Session, org_id: UUID) -> list[RuleFinding]:
     adj_keywords = ["adjustment", "adj", "write-off", "writeoff", "shrinkage"]
     gl_rows = db.query(GlTransaction).filter(GlTransaction.org_id == org_id).all()
@@ -279,6 +375,70 @@ def _check_orphan_inventory(db: Session, org_id: UUID) -> list[RuleFinding]:
             department="operations",
             category="data_quality",
             suggested_action="Map inventory items to GL accounts in your ERP.",
+        )
+    ]
+
+
+def _check_negative_inventory(db: Session, org_id: UUID) -> list[RuleFinding]:
+    items = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.quantity < 0)
+        .all()
+    )
+    if not items:
+        return []
+    skus = ", ".join(sorted({(i.sku or i.item_id) for i in items})[:5])
+    return [
+        RuleFinding(
+            finding_type="negative_inventory",
+            title="Negative inventory quantities",
+            detail=(
+                f"{len(items)} item(s) report negative on-hand quantity ({skus}). "
+                "Negative stock indicates unrecorded receipts or over-issued material."
+            ),
+            severity="high",
+            confidence=1.0,
+            business_impact="inventory",
+            department="operations",
+            category="operational",
+            suggested_action="Cycle-count affected SKUs and correct on-hand balances in the ERP.",
+        )
+    ]
+
+
+def _check_zero_or_dead_stock_signals(db: Session, org_id: UUID) -> list[RuleFinding]:
+    """Zero stock is only material when it is widespread.
+
+    Without demand / open-order data we cannot prove a stockout vs. an obsolete
+    SKU, so we only flag when a large share of the catalog sits at zero (a
+    data/operational signal worth review). Phase 3 will refine this using recent
+    demand and open sales/work orders.
+    """
+    zero = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.quantity == 0)
+        .count()
+    )
+    total = db.query(InventoryItem).filter(InventoryItem.org_id == org_id).count()
+    if total == 0:
+        return []
+    pct = (zero / total) * 100
+    if zero == 0 or pct < 25:
+        return []
+    return [
+        RuleFinding(
+            finding_type="zero_or_dead_stock",
+            title="Widespread zero-stock items",
+            detail=(
+                f"{zero} of {total} inventory item(s) ({pct:.0f}%) are at zero on-hand — "
+                "review for stockouts vs. obsolete SKUs to retire."
+            ),
+            severity="low",
+            confidence=0.8,
+            business_impact="inventory",
+            department="operations",
+            category="operational",
+            suggested_action="Cross-check zero-stock SKUs against recent demand and open orders.",
         )
     ]
 

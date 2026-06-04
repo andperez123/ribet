@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import OperationalFinding, OperationalMemory, OperationalReport
 from app.services.events import emit_event
+from app.services.digest import build_data_digest, build_executive_summary
 from app.services.health import build_trend_snapshot, compute_health, get_prior_snapshot
 from app.services.memory import upsert_memory
 from app.models import Organization
@@ -94,6 +95,8 @@ def generate_report(
     upsert_memory(db, org_id, findings)
     trends = list(trends) + snapshot_delta_strings(op_snap, prior_op)
 
+    digest = build_data_digest(db, org_id)
+
     if settings.ribet_narration.lower() == "on" and settings.openai_api_key:
         emit_event(
             db,
@@ -104,7 +107,7 @@ def generate_report(
         )
         db.commit()
 
-    narration = narrate_findings_batch(findings, org_name, op_snap, prior_op)
+    narration = narrate_findings_batch(findings, org_name, op_snap, prior_op, digest=digest)
     narr_meta = {
         "duration_ms": narration.duration_ms,
         "model_name": narration.model_name,
@@ -153,14 +156,22 @@ def generate_report(
             }
         )
 
-    executive = []
-    for f in sorted(findings, key=lambda x: {"critical": 4, "high": 3, "medium": 2, "low": 1}.get(x.severity, 0), reverse=True)[:5]:
-        executive.append(f.title)
+    executive = build_executive_summary(digest, findings)
+    if narratives.get("__executive__"):
+        llm_exec = narratives["__executive__"].get("narrative")
+        if llm_exec:
+            executive = [llm_exec] + executive
+    for q in narration.management_questions:
+        executive.append(f"Question for management: {q}")
 
-    if not executive:
-        executive.append("No significant operational risks detected in current data.")
-
-    actions = list({f.suggested_action for f in findings if f.suggested_action})
+    severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+    seen_actions: set[str] = set()
+    actions: list[str] = []
+    for f in sorted(findings, key=lambda x: severity_rank.get(x.severity, 0), reverse=True):
+        act = f.suggested_action
+        if act and act not in seen_actions:
+            seen_actions.add(act)
+            actions.append(act)
 
     report.executive_summary = executive
     report.financial_findings = financial
