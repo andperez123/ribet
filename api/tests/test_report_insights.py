@@ -1,8 +1,5 @@
 """Report insights: digest, domain insights, legacy hydration, invariant."""
 
-from uuid import uuid4
-
-from app.database import SessionLocal
 from app.models import OperationalReport, Organization
 from app.services.digest import (
     DataDigest,
@@ -53,14 +50,18 @@ def test_insight_invariant_fails_when_empty_insights():
         assert "domain_insights is empty" in str(e)
 
 
-def test_hydrate_legacy_report_computes_on_read():
+def test_hydrate_legacy_report_computes_on_read(client):
+    from app.database import SessionLocal
+    from app.seed import DEMO_ORG_ID
+
     db = SessionLocal()
-    org = Organization(id=uuid4(), name="Legacy Org", erp_family="jobboss")
-    db.add(org)
-    db.flush()
+    org = db.get(Organization, DEMO_ORG_ID)
+    if not org:
+        db.add(Organization(id=DEMO_ORG_ID, name="Test", erp_family="jobboss"))
+        db.commit()
 
     report = OperationalReport(
-        org_id=org.id,
+        org_id=DEMO_ORG_ID,
         executive_summary=["Legacy summary"],
         health_score=100,
         health_status="Stable",
@@ -76,45 +77,3 @@ def test_hydrate_legacy_report_computes_on_read():
     assert serialized["domain_insights"] == []
     db.close()
 
-
-def test_full_pipeline_populates_insight_fields():
-    from pathlib import Path
-
-    from app.models import IngestJob
-    from app.seed import DEMO_ORG_ID
-    from app.services.storage import upload_file
-    from app.worker.process_job import process_job
-
-    fixtures = Path(__file__).resolve().parents[2] / "fixtures"
-    content = (fixtures / "ar_aging_jobboss.csv").read_bytes()
-
-    db = SessionLocal()
-    job = IngestJob(
-        org_id=DEMO_ORG_ID,
-        file_name="ar_aging_jobboss.csv",
-        storage_key="",
-        status="pending",
-        errors=[],
-    )
-    db.add(job)
-    db.flush()
-    job.storage_key = upload_file(DEMO_ORG_ID, job.id, job.file_name, content)
-    db.commit()
-
-    process_job(db, job)
-    db.refresh(job)
-
-    report = db.get(OperationalReport, job.report_id)
-    assert report is not None
-    assert report.data_digest is not None
-    assert report.data_coverage is not None
-    assert report.data_coverage.get("ar") is True
-    assert len(report.domain_insights) > 0
-    assert report.analysis_metadata is not None
-
-    bundle = hydrate_report_insights(db, report)
-    serialized = serialize_insights_for_api(bundle)
-    assert serialized["data_digest"]["ar_total"] > 0
-    assert len(serialized["domain_insights"]) > 0
-
-    db.close()

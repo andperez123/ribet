@@ -43,5 +43,10 @@ def test_full_pipeline_ar_aging(client):
     assert report is not None
     assert report.health_score >= 0
     assert len(report.executive_summary) > 0
+    assert report.data_digest is not None
+    assert report.data_coverage is not None
+    assert report.data_coverage.get("ar") is True
+    assert len(report.domain_insights or []) > 0
+    assert report.analysis_metadata is not None
 
     db.close()
