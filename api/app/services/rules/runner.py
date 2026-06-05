@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 from dataclasses import dataclass
 from uuid import UUID
@@ -43,6 +45,7 @@ class RuleFinding:
 
 def run_rules(db: Session, org_id: UUID) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
+    findings.extend(_check_ar_zero_amounts(db, org_id))
     findings.extend(_check_ar_aging_spike(db, org_id))
     findings.extend(_check_customer_concentration(db, org_id))
     findings.extend(_check_duplicate_customers(db, org_id))
@@ -138,6 +141,35 @@ def _check_snapshot_deltas(db: Session, org_id: UUID) -> list[RuleFinding]:
             )
         )
     return results
+
+
+def _check_ar_zero_amounts(db: Session, org_id: UUID) -> list[RuleFinding]:
+    row_count = (
+        db.query(func.count(Invoice.id)).filter(Invoice.org_id == org_id).scalar() or 0
+    )
+    total = (
+        db.query(func.sum(Invoice.amount)).filter(Invoice.org_id == org_id).scalar() or 0
+    )
+    if row_count <= 0 or float(total or 0) > 0:
+        return []
+    return [
+        RuleFinding(
+            finding_type="ar_amount_unmapped",
+            title="AR amounts could not be read",
+            detail=(
+                f"{row_count} receivable row(s) were ingested but all amounts are $0. "
+                "Column mapping may not have matched your export headers."
+            ),
+            severity="high",
+            confidence=0.95,
+            business_impact="data_quality",
+            department="finance",
+            category="data_quality",
+            suggested_action=(
+                "Re-export with Amount, Balance, or Total columns, or use aging bucket columns."
+            ),
+        )
+    ]
 
 
 def _check_ar_aging_spike(db: Session, org_id: UUID) -> list[RuleFinding]:

@@ -119,32 +119,74 @@ class ReportInsightsBundle:
         self.hydrated = hydrated
 
 
-def hydrate_report_insights(
+def _should_refresh_digest(frozen: DataDigest | None, live: DataDigest) -> bool:
+    """Recompute when frozen snapshot is empty but canonical tables now have data."""
+    if frozen is None:
+        return digest_has_data(live)
+    if not digest_has_data(frozen) and digest_has_data(live):
+        return True
+    if frozen.ar_invoice_count > 0 and frozen.ar_total <= 0 and live.ar_total > 0:
+        return True
+    if frozen.vendor_count > 0 and frozen.ap_total <= 0 and live.ap_total > 0:
+        return True
+    return False
+
+
+def _bundle_from_live(
     db: Session,
     report: OperationalReport,
+    *,
+    insights_source: str,
 ) -> ReportInsightsBundle:
-    """Return persisted insight fields, computing on read for legacy reports."""
-    if report.data_digest is not None:
-        digest = digest_from_dict(report.data_digest)
-        coverage = report.data_coverage or (build_data_coverage(digest) if digest else {})
-        insights = report.domain_insights or []
-        metadata = report.analysis_metadata or _legacy_metadata(report, coverage)
-        return ReportInsightsBundle(
-            data_digest=report.data_digest,
-            domain_insights=insights,
-            data_coverage=coverage,
-            analysis_metadata=metadata,
-            hydrated=False,
-        )
-
     digest = build_data_digest(db, report.org_id)
     findings = _findings_from_db(db, report)
     coverage = build_data_coverage(digest)
     insights = [i.to_dict() for i in build_domain_insights(digest, findings)]
-    metadata = _legacy_metadata(report, coverage)
+    base_meta = report.analysis_metadata or _legacy_metadata(report, coverage)
+    metadata = {**base_meta, "insights_source": insights_source}
     return ReportInsightsBundle(
         data_digest=digest.to_dict(),
         domain_insights=insights,
+        data_coverage=coverage,
+        analysis_metadata=metadata,
+        hydrated=True,
+    )
+
+
+def hydrate_report_insights(
+    db: Session,
+    report: OperationalReport,
+) -> ReportInsightsBundle:
+    """Return persisted insight fields, computing on read for legacy or stale reports."""
+    live_digest = build_data_digest(db, report.org_id)
+
+    if report.data_digest is not None:
+        frozen = digest_from_dict(report.data_digest)
+        if not _should_refresh_digest(frozen, live_digest):
+            coverage = report.data_coverage or (
+                build_data_coverage(frozen) if frozen else {}
+            )
+            insights = report.domain_insights or []
+            metadata = report.analysis_metadata or _legacy_metadata(report, coverage)
+            if "insights_source" not in metadata:
+                metadata = {**metadata, "insights_source": "frozen"}
+            return ReportInsightsBundle(
+                data_digest=report.data_digest,
+                domain_insights=insights,
+                data_coverage=coverage,
+                analysis_metadata=metadata,
+                hydrated=False,
+            )
+        return _bundle_from_live(db, report, insights_source="refreshed")
+
+    if digest_has_data(live_digest):
+        return _bundle_from_live(db, report, insights_source="legacy")
+
+    coverage = build_data_coverage(live_digest)
+    metadata = {**_legacy_metadata(report, coverage), "insights_source": "legacy"}
+    return ReportInsightsBundle(
+        data_digest=live_digest.to_dict(),
+        domain_insights=[],
         data_coverage=coverage,
         analysis_metadata=metadata,
         hydrated=True,

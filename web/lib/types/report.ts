@@ -56,6 +56,7 @@ export type AnalysisMetadata = {
   narrated_count: number;
   data_domains_present: string[];
   duration_ms?: number | null;
+  insights_source?: string | null;
 };
 
 export type ReportFinding = {

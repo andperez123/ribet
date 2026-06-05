@@ -20,6 +20,10 @@ def compute_health(
     penalty = sum(SEVERITY_PENALTY.get(f.severity, 5) for f in findings)
     score = max(0, min(100, base - penalty))
 
+    dq = [f for f in findings if f.category == "data_quality"]
+    if any(f.finding_type == "ar_amount_unmapped" for f in dq):
+        score = min(score, 70)
+
     if score >= 75:
         status = "Stable"
     elif score >= 50:
@@ -27,9 +31,11 @@ def compute_health(
     else:
         status = "Critical"
 
+    if any(f.finding_type == "ar_amount_unmapped" for f in dq) and status == "Stable":
+        status = "At Risk"
+
     financial = [f for f in findings if f.category == "financial"]
     operational = [f for f in findings if f.category == "operational"]
-    dq = [f for f in findings if f.category == "data_quality"]
 
     components = {
         "cash_flow": max(0, 100 - len([f for f in financial if f.business_impact == "cash_flow"]) * 15),

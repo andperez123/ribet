@@ -62,3 +62,4 @@ class AnalysisMetadataOut(BaseModel):
     narrated_count: int = 0
     data_domains_present: list[str] = Field(default_factory=list)
     duration_ms: int | None = None
+    insights_source: str | None = None

@@ -7,6 +7,7 @@ import { DataCoverageBanner } from "@/features/dashboard/DataCoverageBanner";
 import { DataDigestKpiGrid } from "@/features/dashboard/DataDigestKpiGrid";
 import { HealthScoreHero } from "@/features/dashboard/HealthScoreHero";
 import { InsightCardsGrid } from "@/features/dashboard/InsightCardsGrid";
+import { ReportAnalysisDebugPanel } from "@/features/dashboard/ReportAnalysisDebugPanel";
 import { ReportFindingsList } from "@/features/dashboard/ReportFindingsList";
 import { ReportSections } from "@/features/dashboard/ReportSections";
 import { TopEntitiesPanel } from "@/features/dashboard/TopEntitiesPanel";
@@ -142,6 +143,13 @@ export default async function ReportPage({ params }: Props) {
       )}
 
       <ReportFindingsList findings={findings ?? []} />
+
+      <ReportAnalysisDebugPanel
+        digest={digest}
+        coverage={coverage}
+        metadata={metadata}
+        orgId={report.org_id}
+      />
 
       <ReportSections report={report} />
     </div>

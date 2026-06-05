@@ -210,7 +210,21 @@ def build_domain_insights(digest: DataDigest, findings) -> list[DomainInsight]:
     insights: list[DomainInsight] = []
     seen_fingerprints: set[str] = set()
 
-    if digest.ar_total > 0 or digest.ar_invoice_count > 0:
+    if digest.ar_invoice_count > 0 and digest.ar_total <= 0:
+        insights.append(
+            DomainInsight(
+                domain="data_quality",
+                title="AR amounts not detected",
+                body=(
+                    f"{digest.ar_invoice_count} AR row(s) were ingested but all amounts are $0. "
+                    "Your file may use aging bucket columns or unrecognized balance headers."
+                ),
+                severity="alert",
+                metric_label="Rows ingested",
+                metric_value=str(digest.ar_invoice_count),
+            )
+        )
+    elif digest.ar_total > 0 or digest.ar_invoice_count > 0:
         ar_sev = "watch" if digest.ar_over_90_pct >= 10 else "info"
         if digest.ar_over_90_pct >= 15:
             ar_sev = "alert"
@@ -228,6 +242,8 @@ def build_domain_insights(digest: DataDigest, findings) -> list[DomainInsight]:
             )
         )
         for tc in digest.top_customers[:3]:
+            if tc.amount <= 0:
+                continue
             insights.append(
                 DomainInsight(
                     domain="ar",
@@ -348,16 +364,22 @@ def build_executive_summary(digest: DataDigest, findings, max_items: int = 8) ->
     """Deterministic executive bullets from digest + findings (no LLM text)."""
     lines: list[str] = []
 
-    if digest.ar_total > 0 or digest.ar_invoice_count > 0:
+    if digest.ar_invoice_count > 0 and digest.ar_total <= 0:
+        lines.append(
+            f"AR file has {digest.ar_invoice_count} row(s) but receivable amounts could not be "
+            "read — check that your export includes Amount, Balance, Total, or aging bucket columns."
+        )
+    elif digest.ar_total > 0 or digest.ar_invoice_count > 0:
         lines.append(
             f"Total receivables of ${digest.ar_total:,.0f} across {digest.ar_invoice_count} "
             f"invoice(s); ${digest.ar_over_90:,.0f} ({digest.ar_over_90_pct:.1f}%) is over 90 days."
         )
     if digest.top_customers:
         tc = digest.top_customers[0]
-        lines.append(
-            f"Largest customer {tc.label} at ${tc.amount:,.0f} ({tc.pct:.1f}% of AR)."
-        )
+        if tc.amount > 0:
+            lines.append(
+                f"Largest customer {tc.label} at ${tc.amount:,.0f} ({tc.pct:.1f}% of AR)."
+            )
     if digest.ap_total > 0 or digest.vendor_count > 0:
         lines.append(
             f"Open payables of ${digest.ap_total:,.0f} across {digest.vendor_count} vendor record(s)."
