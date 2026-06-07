@@ -49,6 +49,19 @@ def wait_for_database(max_attempts: int = 60, delay_seconds: float = 2.0) -> Non
     ) from last_error
 
 
+def _stamp_legacy_db_if_needed(cfg) -> None:
+    """DBs created via create_all fallback have no alembic_version row."""
+    from alembic import command
+    from sqlalchemy import inspect
+
+    with engine.connect() as conn:
+        tables = set(inspect(conn).get_table_names())
+    if "alembic_version" in tables or "organizations" not in tables:
+        return
+    logger.info("legacy_db_detected stamping alembic revision 0003 before upgrade")
+    command.stamp(cfg, "0003")
+
+
 def _run_migrations() -> None:
     try:
         from alembic import command
@@ -56,10 +69,15 @@ def _run_migrations() -> None:
 
         ini = Path(__file__).resolve().parent.parent / "alembic.ini"
         cfg = Config(str(ini))
+        _stamp_legacy_db_if_needed(cfg)
         command.upgrade(cfg, "head")
         logger.info("alembic_upgrade_complete")
     except Exception as exc:
-        logger.warning("alembic_upgrade_failed fallback=create_all error=%s", exc)
+        logger.warning(
+            "alembic_upgrade_failed fallback=create_all error=%s",
+            exc,
+            exc_info=True,
+        )
         Base.metadata.create_all(bind=engine)
 
 
