@@ -7,6 +7,7 @@ from decimal import Decimal
 import pandas as pd
 
 from app.services.etl.aliases import detect_aging_bucket_columns, normalize_columns, rename_dataframe
+from app.services.etl.field_mapper import MappingPlan
 from app.services.transforms.canonical.models import (
     CanonicalAPRecord,
     CanonicalARRecord,
@@ -71,9 +72,13 @@ def _looks_like_currency_label(value: str) -> bool:
         return False
 
 
-def dataframe_to_canonical(report_type: str, df: pd.DataFrame) -> CanonicalDataset:
+def dataframe_to_canonical(
+    report_type: str,
+    df: pd.DataFrame,
+    plan: MappingPlan | None = None,
+) -> CanonicalDataset:
     original_columns = list(df.columns)
-    col_map = normalize_columns(original_columns)
+    col_map = plan.column_map if plan else normalize_columns(original_columns)
     df = rename_dataframe(df, col_map)
     bucket_cols = detect_aging_bucket_columns(original_columns)
     dataset = CanonicalDataset()

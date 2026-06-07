@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import mimetypes
 from uuid import UUID
 
@@ -29,6 +30,7 @@ async def create_upload_jobs(
     max_bytes: int,
     sector: str | None = None,
     consent_acknowledged: bool = False,
+    description: str | None = None,
 ) -> list[IngestJob]:
     validated_sector = validate_sector(sector)
     jobs: list[IngestJob] = []
@@ -46,6 +48,8 @@ async def create_upload_jobs(
             errors=[],
             sector=validated_sector,
             consent_acknowledged=consent_acknowledged,
+            user_description=(description or "")[:512] or None,
+            content_hash=hashlib.sha256(content).hexdigest(),
         )
         db.add(job)
         db.flush()

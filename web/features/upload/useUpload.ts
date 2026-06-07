@@ -21,7 +21,8 @@ export function useUpload() {
     async (
       fileList: File[],
       sector: UploadSector,
-      consentAcknowledged = false
+      consentAcknowledged = false,
+      description?: string
     ) => {
       if (!fileList.length) return;
       setIsUploading(true);
@@ -31,7 +32,8 @@ export function useUpload() {
         const results = await client.upload(
           fileList,
           sector,
-          consentAcknowledged
+          consentAcknowledged,
+          description
         );
         setFiles((prev) => [...prev, ...results]);
         const reportId = [...results]

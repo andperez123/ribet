@@ -47,11 +47,12 @@ def download_file(storage_key: str) -> bytes:
 
 
 def read_file_to_dataframe(storage_key: str, filename: str):
-    import pandas as pd
+    """Legacy entry point — returns dataframe only."""
+    return read_upload_to_dataframe(storage_key, filename).dataframe
+
+
+def read_upload_to_dataframe(storage_key: str, filename: str):
+    from app.services.etl.file_intake import intake_file
 
     content = download_file(storage_key)
-    if filename.lower().endswith(".csv"):
-        return pd.read_csv(io.BytesIO(content))
-    if filename.lower().endswith((".xlsx", ".xls")):
-        return pd.read_excel(io.BytesIO(content))
-    raise ValueError(f"Unsupported file type: {filename}")
+    return intake_file(content, filename)

@@ -49,11 +49,15 @@ export class ApiUploadClient implements UploadClient {
   async upload(
     files: File[],
     sector: UploadSector,
-    consentAcknowledged = false
+    consentAcknowledged = false,
+    description?: string
   ): Promise<UploadFileMeta[]> {
     const form = new FormData();
     form.append("sector", sector);
     form.append("consent_acknowledged", consentAcknowledged ? "true" : "false");
+    if (description?.trim()) {
+      form.append("description", description.trim());
+    }
     files.forEach((f) => form.append("files", f));
 
     const res = await fetch(BFF.ingest.uploads, {
@@ -98,7 +102,8 @@ function normalizeJobStatus(
     status === "processing" ||
     status === "done" ||
     status === "error" ||
-    status === "uploading"
+    status === "uploading" ||
+    status === "needs_review"
   ) {
     return status;
   }

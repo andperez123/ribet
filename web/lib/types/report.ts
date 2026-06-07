@@ -92,6 +92,15 @@ export type OperationalReport = {
   analysis_metadata?: AnalysisMetadata;
   analyst_summary?: string | null;
   management_questions?: string[];
+  period_label?: string | null;
+  improvement_notes?: ImprovementNote[];
+};
+
+export type ImprovementNote = {
+  metric: string;
+  direction: string;
+  message: string;
+  severity?: string;
 };
 
 export type Finding = {

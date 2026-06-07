@@ -19,7 +19,9 @@ export function useJobPolling(
     if (!("pollJob" in client)) return;
 
     const pending = files.filter(
-      (f) => f.status === "processing" || f.status === "uploading"
+      (f) =>
+        f.status === "processing" ||
+        f.status === "uploading"
     );
     if (!pending.length) return;
 

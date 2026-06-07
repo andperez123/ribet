@@ -21,6 +21,7 @@ import {
   type SectorId,
 } from "@/lib/sectors";
 import type { UploadSector } from "@/lib/types/upload";
+import { MappingReviewPanel } from "./MappingReviewPanel";
 import { useJobPolling } from "./useJobPolling";
 import { useUpload } from "./useUpload";
 
@@ -37,6 +38,7 @@ export function SectorUploadFlow() {
   const [isDragging, setIsDragging] = useState(false);
   const [consent, setConsent] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
+  const [description, setDescription] = useState("");
   const [filesConfirmed, setFilesConfirmed] = useState(false);
   const {
     files,
@@ -64,11 +66,14 @@ export function SectorUploadFlow() {
       }
       setConsentError(null);
       setFilesConfirmed(false);
-      upload(Array.from(list), activeSector as UploadSector, consent).then(
-        () => setFilesConfirmed(true)
-      );
+      upload(
+        Array.from(list),
+        activeSector as UploadSector,
+        consent,
+        description
+      ).then(() => setFilesConfirmed(true));
     },
-    [upload, activeSector, consent]
+    [upload, activeSector, consent, description]
   );
 
   const onDrop = (e: React.DragEvent) => {
@@ -180,6 +185,18 @@ export function SectorUploadFlow() {
         </p>
       </div>
 
+      <label className="mt-4 block text-center text-sm text-ribet-muted">
+        <span className="mb-1 block">Describe this data (optional)</span>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          maxLength={500}
+          rows={2}
+          placeholder="e.g. Q2 AR aging from JobBOSS"
+          className="w-full max-w-md rounded-lg border border-ribet-border bg-ribet-card px-3 py-2 text-sm text-ribet-text"
+        />
+      </label>
+
       <label className="mt-4 flex cursor-pointer items-start justify-center gap-2 text-left text-sm text-ribet-muted">
         <input
           type="checkbox"
@@ -218,6 +235,30 @@ export function SectorUploadFlow() {
         <p className="mt-3 text-center text-sm text-ribet-risk">{error}</p>
       )}
 
+      {files.some((f) => f.status === "needs_review") && (
+        <div className="mt-6 space-y-3">
+          {files
+            .filter((f) => f.status === "needs_review")
+            .map((f) => (
+              <MappingReviewPanel
+                key={f.id}
+                jobId={f.id}
+                fileName={f.name}
+                onConfirmed={(reportId) => {
+                  setLastReportId(reportId);
+                  setFiles((prev) =>
+                    prev.map((x) =>
+                      x.id === f.id
+                        ? { ...x, status: "done", reportId }
+                        : x
+                    )
+                  );
+                }}
+              />
+            ))}
+        </div>
+      )}
+
       {files.length > 0 && (
         <div className="mt-6 space-y-2">
           {files.map((f) => (
@@ -229,6 +270,8 @@ export function SectorUploadFlow() {
                 <CheckCircle className="h-4 w-4 shrink-0 text-ribet-green" />
               ) : f.status === "error" ? (
                 <span className="text-ribet-risk text-xs">!</span>
+              ) : f.status === "needs_review" ? (
+                <span className="text-amber-400 text-xs">?</span>
               ) : (
                 <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ribet-green" />
               )}

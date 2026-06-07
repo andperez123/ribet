@@ -138,6 +138,19 @@ export default async function ReportPage({ params }: Props) {
 
           <InsightCardsGrid insights={insights} />
 
+          {(report.improvement_notes?.length ?? 0) > 0 && (
+            <Card>
+              <h2 className="text-sm font-semibold text-ribet-text">
+                Since last upload
+              </h2>
+              <ul className="mt-3 space-y-2 text-sm text-ribet-muted">
+                {report.improvement_notes?.map((note) => (
+                  <li key={note.message}>{note.message}</li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
           <TopEntitiesPanel digest={digest} coverage={coverage} />
         </>
       )}

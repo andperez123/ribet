@@ -90,9 +90,29 @@ def process_job(db, job: IngestJob) -> None:
             job_id=job.id,
             extra={"file_name": job.file_name},
         ):
-            result = transform_upload(db, org, job.id, job.file_name, job.storage_key)
+            result = transform_upload(db, org, job, job.file_name, job.storage_key)
         job.report_type = result.report_type
         db.commit()
+
+        if result.status == "needs_review":
+            emit_event(
+                db,
+                "job_needs_review",
+                org_id=org.id,
+                job_id=job.id,
+                metadata={
+                    "report_type": result.report_type,
+                    "mapping_confidence": job.mapping_confidence,
+                },
+            )
+            db.commit()
+            logger.info(
+                "job_needs_review org_id=%s job_id=%s confidence=%s",
+                org.id,
+                job.id,
+                job.mapping_confidence,
+            )
+            return
 
         if result.row_count == 0 and result.report_type == "unknown":
             _fail_job(db, job, "Could not detect report type or parse file")

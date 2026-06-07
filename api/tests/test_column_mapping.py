@@ -75,11 +75,29 @@ def test_customer_total_column_uses_buckets_when_present(db):
     persist_canonical(session, org.id, uuid4(), "2026-06", dataset)
     session.commit()
 
-    digest = build_data_digest(session, org.id)
+    digest = build_data_digest(session, org.id, period="2026-06")
     assert digest.ar_total > 0
     assert digest.ar_invoice_count == 6
     assert digest.top_customers
     assert digest.top_customers[0].amount > 0
+
+
+def test_period_scoped_digest_isolates_periods(db):
+    session, org = db
+    df_june = pd.read_csv(FIXTURES / "ar_aging_buckets.csv")
+    dataset_june = dataframe_to_canonical("ar_aging", df_june)
+    persist_canonical(session, org.id, uuid4(), "2026-06", dataset_june)
+
+    persist_canonical(session, org.id, uuid4(), "2026-05", dataset_june)
+    session.commit()
+
+    june_digest = build_data_digest(session, org.id, period="2026-06")
+    may_digest = build_data_digest(session, org.id, period="2026-05")
+    all_digest = build_data_digest(session, org.id)
+
+    assert june_digest.ar_invoice_count == 6
+    assert may_digest.ar_invoice_count == 6
+    assert all_digest.ar_invoice_count == 12
 
 
 def test_stale_frozen_digest_refreshes_on_read(db):

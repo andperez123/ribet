@@ -28,24 +28,21 @@ def build_operational_snapshot(
     health_score: int,
     health_status: str,
 ) -> OperationalSnapshot:
-    ar_total = (
-        db.query(func.sum(Invoice.amount)).filter(Invoice.org_id == org_id).scalar() or 0
-    )
+    inv_q = db.query(Invoice).filter(Invoice.org_id == org_id, Invoice.period_label == period)
+    ar_total = inv_q.with_entities(func.sum(Invoice.amount)).scalar() or 0
     over_90 = (
-        db.query(func.sum(Invoice.amount))
-        .filter(Invoice.org_id == org_id, Invoice.days_overdue >= 90)
+        inv_q.filter(Invoice.days_overdue >= 90)
+        .with_entities(func.sum(Invoice.amount))
         .scalar()
         or 0
     )
     ar_over_90_pct = (over_90 / ar_total * 100) if ar_total > 0 else 0.0
 
-    ap_total = (
-        db.query(func.sum(Vendor.balance))
-        .filter(Vendor.org_id == org_id, Vendor.balance > 0)
-        .scalar()
-        or 0
+    vend_q = db.query(Vendor).filter(
+        Vendor.org_id == org_id, Vendor.period_label == period, Vendor.balance > 0
     )
-    vendors = db.query(Vendor).filter(Vendor.org_id == org_id, Vendor.balance > 0).all()
+    ap_total = vend_q.with_entities(func.sum(Vendor.balance)).scalar() or 0
+    vendors = vend_q.all()
     vendor_concentration = 0.0
     if vendors and ap_total > 0:
         top = max(vendors, key=lambda v: v.balance or 0)
@@ -53,13 +50,17 @@ def build_operational_snapshot(
 
     inventory_value = (
         db.query(func.sum(InventoryItem.quantity))
-        .filter(InventoryItem.org_id == org_id)
+        .filter(InventoryItem.org_id == org_id, InventoryItem.period_label == period)
         .scalar()
         or 0
     )
 
     adj_keywords = ["adjustment", "adj", "write-off", "shrinkage"]
-    gl_rows = db.query(GlTransaction).filter(GlTransaction.org_id == org_id).all()
+    gl_rows = (
+        db.query(GlTransaction)
+        .filter(GlTransaction.org_id == org_id, GlTransaction.period_label == period)
+        .all()
+    )
     adj_total = sum(
         abs(r.amount)
         for r in gl_rows

@@ -36,6 +36,8 @@ def _report_to_out(db: Session, r: OperationalReport) -> OperationalReportOut:
         analysis_metadata=insight_fields["analysis_metadata"],
         analyst_summary=r.analyst_summary,
         management_questions=r.management_questions or [],
+        period_label=r.period_label,
+        improvement_notes=r.improvement_notes or [],
     )
 
 

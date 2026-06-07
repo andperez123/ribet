@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import OperationalFinding, OperationalMemory, OperationalReport, Organization
+from app.models import IngestJob, OperationalFinding, OperationalMemory, OperationalReport, Organization
 from app.services.digest import (
     build_data_coverage,
     build_data_digest,
@@ -21,6 +21,8 @@ from app.services.report_insights import validate_insights_invariant
 from app.services.rules.cross_sector import run_cross_sector_rules
 from app.services.rules.runner import RuleFinding, run_rules, run_snapshot_delta_rules
 from app.services.telemetry import track_stage
+from app.services.improvements import build_improvement_notes
+from app.services.series import append_series_snapshot, get_or_create_series, get_prior_series_snapshot
 from app.services.transforms.snapshot import (
     build_operational_snapshot,
     get_prior_snapshot as get_prior_op_snapshot,
@@ -113,11 +115,10 @@ def generate_report(
     org = db.get(Organization, org_id)
     org_name = org.name if org else "Organization"
 
-    report = OperationalReport(org_id=org_id, job_ids=[str(j) for j in job_ids])
+    period_label = period or datetime.now(timezone.utc).strftime("%Y-%m")
+    report = OperationalReport(org_id=org_id, job_ids=[str(j) for j in job_ids], period_label=period_label)
     db.add(report)
     db.flush()
-
-    period_label = period or datetime.now(timezone.utc).strftime("%Y-%m")
     prior_op = get_prior_op_snapshot(db, org_id, exclude_period=period_label)
     op_snap = build_operational_snapshot(
         db,
@@ -142,7 +143,7 @@ def generate_report(
     trends = build_trend_snapshot(health_snap, prior_health, findings)
     trends = list(trends) + snapshot_delta_strings(op_snap, prior_op)
 
-    digest = build_data_digest(db, org_id)
+    digest = build_data_digest(db, org_id, period=period_label)
     coverage = build_data_coverage(digest)
     domain_insights = [i.to_dict() for i in build_domain_insights(digest, findings)]
 
@@ -263,6 +264,35 @@ def generate_report(
             extra={"finding_count": len(findings)},
         ):
             persist_findings(db, org_id, job_ids[0], report.id, findings, narratives)
+
+    if job_id:
+        job = db.get(IngestJob, job_id)
+        if job and job.schema_fingerprint and job.report_type:
+            series = get_or_create_series(
+                db, org_id, job.report_type, job.schema_fingerprint, job
+            )
+            prior_snap = get_prior_series_snapshot(db, series.id)
+            kpi_summary = {
+                "ar_total": digest.ar_total,
+                "ar_over_90_pct": digest.ar_over_90_pct,
+                "ap_total": digest.ap_total,
+                "health_score": health_snap.score,
+                "health_status": health_snap.status,
+                "vendor_concentration": op_snap.vendor_concentration,
+            }
+            improvement_notes = build_improvement_notes(kpi_summary, prior_snap)
+            report.improvement_notes = improvement_notes
+            append_series_snapshot(
+                db,
+                org_id=org_id,
+                series=series,
+                period=period_label,
+                job_id=job_id,
+                report_id=report.id,
+                content_hash=job.content_hash,
+                kpi_summary=kpi_summary,
+                improvement_notes=improvement_notes,
+            )
 
     db.commit()
     db.refresh(report)

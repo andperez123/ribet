@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -11,6 +12,7 @@ from app.deps import get_organization, verify_api_key
 from app.models import IngestJob, Organization
 from app.schemas import UploadJob, UploadJobsResponse
 from app.services.ingest import create_upload_jobs
+from app.services.mapping_review import confirm_job_mapping, get_mapping_review
 
 router = APIRouter(prefix="/v1/ingest", tags=["ingest"])
 
@@ -23,6 +25,9 @@ def _job_to_schema(job: IngestJob) -> UploadJob:
         sector=job.sector,
         errors=job.errors or [],
         report_id=job.report_id,
+        mapping_status=job.mapping_status,
+        mapping_confidence=job.mapping_confidence,
+        duplicate_of_job_id=job.duplicate_of_job_id,
         created_at=job.created_at.isoformat() if job.created_at else None,
         updated_at=job.updated_at.isoformat() if job.updated_at else None,
     )
@@ -33,6 +38,7 @@ async def upload_files(
     files: list[UploadFile] = File(...),
     sector: str | None = Form(None),
     consent_acknowledged: str = Form("false"),
+    description: str | None = Form(None),
     org: Organization = Depends(get_organization),
     db: Session = Depends(get_db),
     _: None = Depends(verify_api_key),
@@ -50,6 +56,7 @@ async def upload_files(
             settings.max_upload_bytes,
             sector=sector,
             consent_acknowledged=True,
+            description=description,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -83,4 +90,41 @@ def get_job(
     job = db.get(IngestJob, job_id)
     if not job or job.org_id != org.id:
         raise HTTPException(status_code=404, detail="Job not found")
+    return _job_to_schema(job)
+
+
+@router.get("/jobs/{job_id}/mapping")
+def get_job_mapping(
+    job_id: UUID,
+    org: Organization = Depends(get_organization),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_api_key),
+):
+    job = db.get(IngestJob, job_id)
+    if not job or job.org_id != org.id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return get_mapping_review(db, job)
+
+
+class MappingConfirmRequest(BaseModel):
+    column_map: dict[str, str] = Field(default_factory=dict)
+
+
+@router.post("/jobs/{job_id}/mapping/confirm", response_model=UploadJob)
+def confirm_mapping(
+    job_id: UUID,
+    body: MappingConfirmRequest,
+    org: Organization = Depends(get_organization),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_api_key),
+):
+    job = db.get(IngestJob, job_id)
+    if not job or job.org_id != org.id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "needs_review":
+        raise HTTPException(status_code=400, detail="Job is not awaiting mapping review")
+    try:
+        job = confirm_job_mapping(db, org, job, column_map=body.column_map or None)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return _job_to_schema(job)

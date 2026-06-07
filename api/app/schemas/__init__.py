@@ -13,7 +13,7 @@ from app.schemas.insights import (
 )
 
 
-UploadStatus = Literal["pending", "processing", "done", "error"]
+UploadStatus = Literal["pending", "processing", "done", "error", "needs_review"]
 Severity = Literal["low", "medium", "high", "critical"]
 
 
@@ -24,6 +24,9 @@ class UploadJob(BaseModel):
     sector: str | None = None
     errors: list[str] = Field(default_factory=list)
     report_id: UUID | None = None
+    mapping_status: str | None = None
+    mapping_confidence: float | None = None
+    duplicate_of_job_id: UUID | None = None
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -162,6 +165,8 @@ class OperationalReportOut(BaseModel):
     analysis_metadata: AnalysisMetadataOut = Field(default_factory=AnalysisMetadataOut)
     analyst_summary: str | None = None
     management_questions: list[str] = Field(default_factory=list)
+    period_label: str | None = None
+    improvement_notes: list[dict] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

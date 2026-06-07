@@ -3,7 +3,8 @@ export type UploadStatus =
   | "uploading"
   | "processing"
   | "done"
-  | "error";
+  | "error"
+  | "needs_review";
 
 export type UploadSector =
   | "financials"
@@ -26,17 +27,21 @@ export interface UploadClient {
   upload(
     files: File[],
     sector: UploadSector,
-    consentAcknowledged?: boolean
+    consentAcknowledged?: boolean,
+    description?: string
   ): Promise<UploadFileMeta[]>;
 }
 
 export type UploadJob = {
   id: string;
-  status: UploadStatus;
+  status: UploadStatus | "pending";
   file_name: string;
   sector?: string | null;
   errors?: string[];
   report_id?: string | null;
+  mapping_status?: string | null;
+  mapping_confidence?: number | null;
+  duplicate_of_job_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };

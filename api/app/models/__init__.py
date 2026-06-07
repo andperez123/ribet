@@ -54,6 +54,16 @@ class IngestJob(Base):
     report_type: Mapped[Optional[str]] = mapped_column(String(64))
     sector: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     consent_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
+    user_description: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    schema_fingerprint: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    detected_period: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    row_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    mapping_metadata: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
+    mapping_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    mapping_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    intake_metadata: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
+    duplicate_of_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -171,7 +181,39 @@ class OperationalReport(Base):
     analysis_metadata: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
     analyst_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     management_questions: Mapped[Optional[list]] = mapped_column(JsonColumn, nullable=True)
+    period_label: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    improvement_notes: Mapped[Optional[list]] = mapped_column(JsonColumn, nullable=True)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DataSeries(Base):
+    __tablename__ = "data_series"
+    __table_args__ = (
+        Index("ix_data_series_org_fingerprint", "org_id", "schema_fingerprint", "report_type", unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
+    report_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    display_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SeriesSnapshot(Base):
+    __tablename__ = "series_snapshots"
+    __table_args__ = (Index("ix_series_snapshots_series_at", "series_id", "snapshot_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    series_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("data_series.id"), nullable=False)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
+    period: Mapped[str] = mapped_column(String(16), nullable=False)
+    job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("ingest_jobs.id"), nullable=True)
+    report_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("operational_reports.id"), nullable=True)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    kpi_summary: Mapped[dict] = mapped_column(JsonColumn, default=dict)
+    improvement_notes: Mapped[list] = mapped_column(JsonColumn, default=list)
+    snapshot_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ProductEvent(Base):

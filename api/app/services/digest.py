@@ -61,33 +61,60 @@ class DataDigest:
         return d
 
 
-def build_data_digest(db: Session, org_id: UUID, top_n: int = 5) -> DataDigest:
+def build_data_digest(
+    db: Session,
+    org_id: UUID,
+    top_n: int = 5,
+    period: str | None = None,
+) -> DataDigest:
     digest = DataDigest()
 
+    def _invoice_q():
+        q = db.query(Invoice).filter(Invoice.org_id == org_id)
+        if period:
+            q = q.filter(Invoice.period_label == period)
+        return q
+
+    def _vendor_q():
+        q = db.query(Vendor).filter(Vendor.org_id == org_id)
+        if period:
+            q = q.filter(Vendor.period_label == period)
+        return q
+
+    def _gl_q():
+        q = db.query(GlTransaction).filter(GlTransaction.org_id == org_id)
+        if period:
+            q = q.filter(GlTransaction.period_label == period)
+        return q
+
+    def _inv_q():
+        q = db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
+        if period:
+            q = q.filter(InventoryItem.period_label == period)
+        return q
+
     # --- Accounts Receivable ---
+    inv_base = _invoice_q()
     digest.ar_total = float(
-        db.query(func.sum(Invoice.amount)).filter(Invoice.org_id == org_id).scalar() or 0
+        inv_base.with_entities(func.sum(Invoice.amount)).scalar() or 0
     )
     digest.ar_over_90 = float(
-        db.query(func.sum(Invoice.amount))
-        .filter(Invoice.org_id == org_id, Invoice.days_overdue >= 90)
+        inv_base.filter(Invoice.days_overdue >= 90)
+        .with_entities(func.sum(Invoice.amount))
         .scalar()
         or 0
     )
     digest.ar_over_90_pct = (
         (digest.ar_over_90 / digest.ar_total * 100) if digest.ar_total > 0 else 0.0
     )
-    digest.ar_invoice_count = (
-        db.query(func.count(Invoice.id)).filter(Invoice.org_id == org_id).scalar() or 0
-    )
+    digest.ar_invoice_count = inv_base.count()
 
     cust_names = {
         c.customer_id: c.name
         for c in db.query(Customer).filter(Customer.org_id == org_id).all()
     }
     cust_rows = (
-        db.query(Invoice.customer_id, func.sum(Invoice.amount))
-        .filter(Invoice.org_id == org_id)
+        inv_base.with_entities(Invoice.customer_id, func.sum(Invoice.amount))
         .group_by(Invoice.customer_id)
         .all()
     )
@@ -106,7 +133,7 @@ def build_data_digest(db: Session, org_id: UUID, top_n: int = 5) -> DataDigest:
         )
 
     # --- Accounts Payable (name-normalized to combine split vendor records) ---
-    vendors = db.query(Vendor).filter(Vendor.org_id == org_id).all()
+    vendors = _vendor_q().all()
     digest.vendor_count = len(vendors)
     digest.ap_negative_total = float(sum(v.balance or 0 for v in vendors if (v.balance or 0) < 0))
     positive = [v for v in vendors if (v.balance or 0) > 0]
@@ -129,7 +156,7 @@ def build_data_digest(db: Session, org_id: UUID, top_n: int = 5) -> DataDigest:
         )
 
     # --- General Ledger ---
-    gl_rows = db.query(GlTransaction).filter(GlTransaction.org_id == org_id).all()
+    gl_rows = _gl_q().all()
     digest.gl_txn_count = len(gl_rows)
     digest.gl_adjustment_total = float(
         sum(
@@ -141,7 +168,7 @@ def build_data_digest(db: Session, org_id: UUID, top_n: int = 5) -> DataDigest:
     digest.gl_unmapped_count = sum(1 for r in gl_rows if not (r.account_id or "").strip())
 
     # --- Inventory ---
-    inv = db.query(InventoryItem).filter(InventoryItem.org_id == org_id).all()
+    inv = _inv_q().all()
     digest.inventory_item_count = len(inv)
     digest.inventory_total_qty = float(sum(i.quantity or 0 for i in inv))
     digest.inventory_negative_count = sum(1 for i in inv if (i.quantity or 0) < 0)

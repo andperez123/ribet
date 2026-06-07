@@ -138,7 +138,7 @@ def _bundle_from_live(
     *,
     insights_source: str,
 ) -> ReportInsightsBundle:
-    digest = build_data_digest(db, report.org_id)
+    digest = build_data_digest(db, report.org_id, period=report.period_label)
     findings = _findings_from_db(db, report)
     coverage = build_data_coverage(digest)
     insights = [i.to_dict() for i in build_domain_insights(digest, findings)]
@@ -158,7 +158,7 @@ def hydrate_report_insights(
     report: OperationalReport,
 ) -> ReportInsightsBundle:
     """Return persisted insight fields, computing on read for legacy or stale reports."""
-    live_digest = build_data_digest(db, report.org_id)
+    live_digest = build_data_digest(db, report.org_id, period=report.period_label)
 
     if report.data_digest is not None:
         frozen = digest_from_dict(report.data_digest)
