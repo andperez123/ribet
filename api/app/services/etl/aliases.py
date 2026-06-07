@@ -17,6 +17,9 @@ COLUMN_ALIASES: dict[str, list[str]] = {
         "open amount",
         "total balance",
         "total",
+        "total owed",
+        "total open",
+        "open ($)",
         "invoice amount",
         "amount due",
         "balance due",
@@ -25,7 +28,7 @@ COLUMN_ALIASES: dict[str, list[str]] = {
         "customer total",
         "vendor total",
     ],
-    "days_overdue": ["days overdue", "days past due", "age days", "days", "overdue days"],
+    "days_overdue": ["days overdue", "days past due", "age days", "overdue days"],
     "aging_bucket": ["aging bucket", "bucket", "aging", "age category"],
     "account_id": ["account", "account id", "gl account", "acct", "account no", "account number"],
     "account_name": ["account name", "description", "account description"],
@@ -42,17 +45,36 @@ MONETARY_TOKENS = frozenset(
 ENTITY_TOKENS = frozenset({"customer", "client", "vendor", "supplier", "cust", "name"})
 
 # Aging bucket column headers (not mapped to canonical fields — used for sum_buckets strategy)
+_DAYS_SUFFIX = r"(?:\s*days?)?"
 AGING_BUCKET_PATTERNS: list[tuple[re.Pattern[str], int]] = [
-    (re.compile(r"^current$", re.I), 0),
-    (re.compile(r"^(?:0[\s-]*30|1[\s-]*30|0-30|1-30)$", re.I), 15),
-    (re.compile(r"^(?:31[\s-]*60|30[\s-]*60|31-60)$", re.I), 45),
-    (re.compile(r"^(?:61[\s-]*90|60[\s-]*90|61-90)$", re.I), 75),
-    (re.compile(r"^(?:91[\s-]*120|90[\s-]*120|91-120)$", re.I), 105),
-    (re.compile(r"^(?:over\s*90|90\+|>\s*90)$", re.I), 95),
-    (re.compile(r"^(?:over\s*120|120\+|>\s*120)$", re.I), 125),
-    (re.compile(r"^90[\s-]*180$", re.I), 135),
-    (re.compile(r"^(?:180\+|over\s*180)$", re.I), 200),
+    (re.compile(rf"^current(?:\s*\([^)]*\))?{_DAYS_SUFFIX}$", re.I), 0),
+    (re.compile(rf"^(?:0[\s-]*30|1[\s-]*30|0-30|1-30){_DAYS_SUFFIX}(?:\s*\([^)]*\))?$", re.I), 15),
+    (re.compile(rf"^(?:31[\s-]*60|30[\s-]*60|31-60){_DAYS_SUFFIX}$", re.I), 45),
+    (re.compile(rf"^(?:61[\s-]*90|60[\s-]*90|61-90){_DAYS_SUFFIX}$", re.I), 75),
+    (re.compile(rf"^(?:91[\s-]*120|90[\s-]*120|91-120){_DAYS_SUFFIX}$", re.I), 105),
+    (re.compile(rf"^(?:over\s*90|90\+|91\+|>\s*90){_DAYS_SUFFIX}$", re.I), 95),
+    (re.compile(rf"^(?:over\s*120|120\+|>\s*120){_DAYS_SUFFIX}$", re.I), 125),
+    (re.compile(rf"^90[\s-]*180{_DAYS_SUFFIX}$", re.I), 135),
+    (re.compile(rf"^(?:180\+|over\s*180){_DAYS_SUFFIX}$", re.I), 200),
 ]
+
+BUCKET_CANONICAL_KEYS = ("current", "1_30", "31_60", "61_90", "91_plus", "over_120")
+
+
+def bucket_canonical_key(col: str, implied_days: int) -> str:
+    """Map a bucket column header to a stable breakdown key."""
+    lower = str(col).lower().strip()
+    if "current" in lower or implied_days == 0:
+        return "current"
+    if implied_days <= 30:
+        return "1_30"
+    if implied_days <= 60:
+        return "31_60"
+    if implied_days <= 90:
+        return "61_90"
+    if implied_days <= 120:
+        return "91_plus"
+    return "over_120"
 
 
 def _tokenize(header: str) -> set[str]:
@@ -142,8 +164,12 @@ def normalize_columns(columns: list[str]) -> dict[str, str]:
     if not columns:
         return {}
 
+    bucket_cols = {c for c, _ in detect_aging_bucket_columns([str(c) for c in columns])}
+
     scores: list[tuple[float, str, str]] = []
     for col in columns:
+        if str(col) in bucket_cols:
+            continue
         for canonical, aliases in COLUMN_ALIASES.items():
             score = _score_column(str(col), canonical, aliases)
             if score >= 0.5:

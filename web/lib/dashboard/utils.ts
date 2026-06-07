@@ -64,24 +64,55 @@ export const COVERAGE_DOMAIN_LABELS: Record<keyof import("@/lib/types/report").D
   inventory: "Inventory",
 };
 
-export function formatCoverageSummary(coverage: import("@/lib/types/report").DataCoverage): string {
+export function formatCoverageSummary(
+  coverage: import("@/lib/types/report").DataCoverage,
+  digest?: import("@/lib/types/report").DataDigest
+): string {
   const analyzed: string[] = [];
   const missing: string[] = [];
+  const warnings: string[] = [];
+
   for (const [key, label] of Object.entries(COVERAGE_DOMAIN_LABELS)) {
     const covered = coverage[key as keyof typeof coverage];
-    if (covered) analyzed.push(label);
-    else missing.push(label);
+    if (covered) {
+      if (key === "ap" && digest?.ap_total) {
+        analyzed.push(`${label} ($${digest.ap_total.toLocaleString()})`);
+      } else if (key === "ar" && digest?.ar_total) {
+        analyzed.push(`${label} ($${digest.ar_total.toLocaleString()})`);
+      } else {
+        analyzed.push(label);
+      }
+    } else if (key === "ar" && coverage.ar_unmapped) {
+      warnings.push(
+        "AR rows were found but amounts could not be read — re-upload or confirm mapping"
+      );
+    } else {
+      missing.push(label);
+    }
   }
-  if (!analyzed.length && missing.length) {
+
+  if (coverage.primary_domain === "ap" && coverage.ar_unmapped) {
+    return (
+      `Accounts payable were analyzed${digest?.ap_total ? ` ($${digest.ap_total.toLocaleString()})` : ""}. ` +
+      "AR rows were found but amounts could not be read — re-upload AR to refresh."
+    );
+  }
+
+  if (!analyzed.length && !warnings.length && missing.length) {
     return "No financial domains were detected in this upload. Upload AR, AP, GL, or inventory exports to generate insights.";
   }
-  if (analyzed.length && !missing.length) {
-    return `${analyzed.join(", ")} were analyzed for this report.`;
+
+  const parts: string[] = [];
+  if (analyzed.length) {
+    parts.push(`${analyzed.join(" and ")} were analyzed for this report.`);
+  }
+  if (warnings.length) {
+    parts.push(warnings.join(". ") + ".");
   }
   if (analyzed.length && missing.length) {
-    return `${analyzed.join(" and ")} were analyzed. ${missing.join(", ")} were not included in this upload.`;
+    parts.push(`${missing.join(", ")} were not included in this upload.`);
   }
-  return "";
+  return parts.join(" ");
 }
 
 export const INSIGHT_SEVERITY_STYLES: Record<
@@ -97,9 +128,7 @@ export function digestHasData(digest: import("@/lib/types/report").DataDigest | 
   if (!digest) return false;
   return (
     digest.ar_total > 0 ||
-    digest.ar_invoice_count > 0 ||
     digest.ap_total > 0 ||
-    digest.vendor_count > 0 ||
     digest.gl_txn_count > 0 ||
     digest.inventory_item_count > 0
   );

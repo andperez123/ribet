@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from app.services.etl.aliases import (
@@ -9,6 +10,40 @@ from app.services.etl.aliases import (
     normalize_columns,
 )
 from app.services.etl.profiler import ColumnProfile
+
+_SUMMARY_ROW_PATTERNS = re.compile(
+    r"^(?:total\s+open|grand\s+total|total|subtotal|summary)(?:\s*\([^)]*\))?$",
+    re.I,
+)
+
+
+def _looks_like_numeric_entity(value: str) -> bool:
+    stripped = value.replace(",", "").replace("$", "").strip()
+    if not stripped or re.search(r"[a-zA-Z]", stripped):
+        return False
+    digits = re.sub(r"[^\d]", "", stripped)
+    return len(digits) >= 4
+
+
+def _is_summary_entity(value: str) -> bool:
+    return bool(_SUMMARY_ROW_PATTERNS.match(value.strip()))
+
+
+def _entity_column_confidence(prof: ColumnProfile | None) -> tuple[float, list[str]]:
+    warnings: list[str] = []
+    if not prof or not prof.sample_values:
+        return 0.85, warnings
+    samples = [str(v).strip() for v in prof.sample_values if str(v).strip()]
+    if not samples:
+        return 0.85, warnings
+    numeric_only = sum(1 for v in samples if _looks_like_numeric_entity(v))
+    if numeric_only / len(samples) > 0.5:
+        warnings.append(f"entity column {prof.name}: >50% numeric-only values")
+        return 0.4, warnings
+    if any(_is_summary_entity(v) for v in samples):
+        warnings.append(f"summary row detected in {prof.name}")
+        return 0.5, warnings
+    return 0.85, warnings
 
 
 @dataclass
@@ -70,14 +105,20 @@ def propose_mapping(
 
     profile_by_name = {p.name: p for p in profiles}
     field_mapping: dict[str, FieldMapping] = {}
+    warnings: list[str] = []
 
     for orig, canonical in col_map.items():
         score = 0.85
         prof = profile_by_name.get(orig)
         if prof and canonical == "amount" and not prof.looks_numeric and not prof.looks_currency:
             score = 0.4
-        if prof and canonical in ("customer_name", "vendor_name") and prof.looks_currency:
-            score = 0.1
+        if prof and canonical in ("customer_name", "vendor_name"):
+            if prof.looks_currency:
+                score = 0.1
+            else:
+                entity_score, entity_warnings = _entity_column_confidence(prof)
+                score = min(score, entity_score)
+                warnings.extend(entity_warnings)
         field_mapping[canonical] = FieldMapping(source=orig, confidence=score)
 
     amount_strategy = "single_column"
@@ -91,22 +132,27 @@ def propose_mapping(
                 strategy="sum_buckets",
                 sources=bucket_names,
             )
+        elif has_amount and bucket_names:
+            amount_strategy = "single_column"
+
+    entity_field = "customer_name" if report_type == "ar_aging" else "vendor_name" if report_type == "ap_aging" else None
+    if amount_strategy == "sum_buckets" and entity_field and entity_field not in field_mapping:
+        warnings.append(f"missing required field: {entity_field}")
+        field_mapping[entity_field] = FieldMapping(source=None, confidence=0.3)
 
     mapped_sources = {fm.source for fm in field_mapping.values() if fm.source}
-    mapped_sources.update(
-        s for fm in field_mapping.values() for s in fm.sources
-    )
+    mapped_sources.update(s for fm in field_mapping.values() for s in fm.sources)
     unmapped = [c for c in columns if c not in mapped_sources and c not in bucket_names]
 
     required = _REQUIRED_FIELDS.get(report_type, [])
     confidences: list[float] = []
-    warnings: list[str] = []
 
     for req in required:
         fm = field_mapping.get(req)
         if not fm or (not fm.source and fm.strategy == "single_column"):
             confidences.append(0.3)
-            warnings.append(f"missing required field: {req}")
+            if f"missing required field: {req}" not in warnings:
+                warnings.append(f"missing required field: {req}")
         else:
             confidences.append(fm.confidence)
 

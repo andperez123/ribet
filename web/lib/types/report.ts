@@ -20,6 +20,12 @@ export type DataDigest = {
   ap_negative_total: number;
   vendor_count: number;
   top_vendors: TopEntry[];
+  ap_current: number;
+  ap_1_30: number;
+  ap_31_60: number;
+  ap_61_90: number;
+  ap_91_plus: number;
+  ap_over_60_pct: number;
 
   gl_txn_count: number;
   gl_adjustment_total: number;
@@ -47,6 +53,10 @@ export type DataCoverage = {
   ap: boolean;
   gl: boolean;
   inventory: boolean;
+  ar_present?: boolean;
+  ar_unmapped?: boolean;
+  ap_aging_available?: boolean;
+  primary_domain?: string | null;
 };
 
 export type AnalysisMetadata = {

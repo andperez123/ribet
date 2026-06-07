@@ -71,7 +71,8 @@ def test_hydrate_legacy_report_computes_on_read(client):
 
     bundle = hydrate_report_insights(db, report)
     assert bundle.hydrated is True
-    assert bundle.data_coverage == {"ar": False, "ap": False, "gl": False, "inventory": False}
+    assert bundle.data_coverage["ar"] is False
+    assert bundle.data_coverage["ap"] is False
     serialized = serialize_insights_for_api(bundle)
     assert "data_digest" in serialized
     assert serialized["domain_insights"] == []

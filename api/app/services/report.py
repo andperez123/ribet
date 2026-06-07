@@ -12,6 +12,7 @@ from app.services.digest import (
     build_data_digest,
     build_domain_insights,
     build_executive_summary,
+    domains_for_report_type,
 )
 from app.services.events import emit_event
 from app.services.health import build_trend_snapshot, compute_health, get_prior_snapshot
@@ -84,7 +85,7 @@ def _analysis_metadata_from_narration(
     finding_count: int,
     coverage: dict[str, bool],
 ) -> dict:
-    domains = [k for k, v in coverage.items() if v]
+    domains = [k for k, v in coverage.items() if v and k in ("ar", "ap", "gl", "inventory")]
     if narration.skipped:
         status = "skipped"
     elif narration.failed:
@@ -109,13 +110,30 @@ def generate_report(
     period: str | None = None,
 ) -> OperationalReport:
     job_id = job_ids[0] if job_ids else None
+    period_label = period or datetime.now(timezone.utc).strftime("%Y-%m")
+    trigger_job = db.get(IngestJob, job_id) if job_id else None
+    report_domains = domains_for_report_type(trigger_job.report_type if trigger_job else None)
+    primary_domain = None
+    if trigger_job and trigger_job.report_type:
+        primary_domain = {
+            "ar_aging": "ar",
+            "ap_aging": "ap",
+            "gl_detail": "gl",
+            "inventory": "inventory",
+        }.get(trigger_job.report_type)
+
     with track_stage(db, "rules", org_id=org_id, job_id=job_id):
-        findings = run_rules(db, org_id)
+        findings = run_rules(
+            db,
+            org_id,
+            period=period_label,
+            source_job_ids=job_ids or None,
+            domains=report_domains,
+        )
 
     org = db.get(Organization, org_id)
     org_name = org.name if org else "Organization"
 
-    period_label = period or datetime.now(timezone.utc).strftime("%Y-%m")
     report = OperationalReport(org_id=org_id, job_ids=[str(j) for j in job_ids], period_label=period_label)
     db.add(report)
     db.flush()
@@ -143,8 +161,14 @@ def generate_report(
     trends = build_trend_snapshot(health_snap, prior_health, findings)
     trends = list(trends) + snapshot_delta_strings(op_snap, prior_op)
 
-    digest = build_data_digest(db, org_id, period=period_label)
-    coverage = build_data_coverage(digest)
+    digest = build_data_digest(
+        db,
+        org_id,
+        period=period_label,
+        source_job_ids=job_ids or None,
+        domains=report_domains,
+    )
+    coverage = build_data_coverage(digest, primary_domain=primary_domain)
     domain_insights = [i.to_dict() for i in build_domain_insights(digest, findings)]
 
     validate_insights_invariant(digest.to_dict(), domain_insights)

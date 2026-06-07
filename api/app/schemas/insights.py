@@ -26,6 +26,12 @@ class DataDigestOut(BaseModel):
     ap_negative_total: float = 0.0
     vendor_count: int = 0
     top_vendors: list[TopEntryOut] = Field(default_factory=list)
+    ap_current: float = 0.0
+    ap_1_30: float = 0.0
+    ap_31_60: float = 0.0
+    ap_61_90: float = 0.0
+    ap_91_plus: float = 0.0
+    ap_over_60_pct: float = 0.0
 
     gl_txn_count: int = 0
     gl_adjustment_total: float = 0.0
@@ -53,6 +59,10 @@ class DataCoverageOut(BaseModel):
     ap: bool = False
     gl: bool = False
     inventory: bool = False
+    ar_present: bool = False
+    ar_unmapped: bool = False
+    ap_aging_available: bool = False
+    primary_domain: str | None = None
 
 
 class AnalysisMetadataOut(BaseModel):

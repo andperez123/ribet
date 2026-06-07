@@ -33,6 +33,12 @@ const EMPTY_DIGEST: DataDigest = {
   ap_negative_total: 0,
   vendor_count: 0,
   top_vendors: [],
+  ap_current: 0,
+  ap_1_30: 0,
+  ap_31_60: 0,
+  ap_61_90: 0,
+  ap_91_plus: 0,
+  ap_over_60_pct: 0,
   gl_txn_count: 0,
   gl_adjustment_total: 0,
   gl_unmapped_count: 0,
@@ -48,6 +54,10 @@ const EMPTY_COVERAGE: DataCoverage = {
   ap: false,
   gl: false,
   inventory: false,
+  ar_present: false,
+  ar_unmapped: false,
+  ap_aging_available: false,
+  primary_domain: null,
 };
 
 const EMPTY_METADATA: AnalysisMetadata = {
@@ -68,8 +78,8 @@ export default async function ReportPage({ params }: Props) {
 
   if (!report) notFound();
 
-  const digest = report.data_digest ?? EMPTY_DIGEST;
-  const coverage = report.data_coverage ?? EMPTY_COVERAGE;
+  const digest = { ...EMPTY_DIGEST, ...(report.data_digest ?? {}) };
+  const coverage = { ...EMPTY_COVERAGE, ...(report.data_coverage ?? {}) };
   const insights: DomainInsight[] = report.domain_insights ?? [];
   const metadata = report.analysis_metadata ?? EMPTY_METADATA;
   const hasData = digestHasData(digest);
@@ -103,7 +113,7 @@ export default async function ReportPage({ params }: Props) {
 
       {healthScore && <HealthScoreHero score={healthScore} />}
 
-      <DataCoverageBanner coverage={coverage} />
+      <DataCoverageBanner coverage={coverage} digest={digest} />
 
       {!hasData && (
         <Card className="border-dashed">

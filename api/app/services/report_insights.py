@@ -11,12 +11,14 @@ from app.schemas.insights import (
     DataDigestOut,
     DomainInsightOut,
 )
+from app.models import IngestJob
 from app.services.digest import (
     DataDigest,
     build_data_coverage,
     build_data_digest,
     build_domain_insights,
     digest_has_data,
+    domains_for_report_type,
 )
 from app.services.rules.runner import RuleFinding
 
@@ -132,15 +134,44 @@ def _should_refresh_digest(frozen: DataDigest | None, live: DataDigest) -> bool:
     return False
 
 
+def _report_scoping(db: Session, report: OperationalReport) -> tuple[list, set[str] | None, str | None]:
+    job_ids = []
+    for raw in report.job_ids or []:
+        try:
+            from uuid import UUID
+
+            job_ids.append(UUID(str(raw)))
+        except ValueError:
+            continue
+    trigger_job = db.get(IngestJob, job_ids[0]) if job_ids else None
+    domains = domains_for_report_type(trigger_job.report_type if trigger_job else None)
+    primary_domain = None
+    if trigger_job and trigger_job.report_type:
+        primary_domain = {
+            "ar_aging": "ar",
+            "ap_aging": "ap",
+            "gl_detail": "gl",
+            "inventory": "inventory",
+        }.get(trigger_job.report_type)
+    return job_ids or None, domains, primary_domain
+
+
 def _bundle_from_live(
     db: Session,
     report: OperationalReport,
     *,
     insights_source: str,
 ) -> ReportInsightsBundle:
-    digest = build_data_digest(db, report.org_id, period=report.period_label)
+    source_job_ids, domains, primary_domain = _report_scoping(db, report)
+    digest = build_data_digest(
+        db,
+        report.org_id,
+        period=report.period_label,
+        source_job_ids=source_job_ids,
+        domains=domains,
+    )
     findings = _findings_from_db(db, report)
-    coverage = build_data_coverage(digest)
+    coverage = build_data_coverage(digest, primary_domain=primary_domain)
     insights = [i.to_dict() for i in build_domain_insights(digest, findings)]
     base_meta = report.analysis_metadata or _legacy_metadata(report, coverage)
     metadata = {**base_meta, "insights_source": insights_source}
@@ -158,7 +189,14 @@ def hydrate_report_insights(
     report: OperationalReport,
 ) -> ReportInsightsBundle:
     """Return persisted insight fields, computing on read for legacy or stale reports."""
-    live_digest = build_data_digest(db, report.org_id, period=report.period_label)
+    source_job_ids, domains, primary_domain = _report_scoping(db, report)
+    live_digest = build_data_digest(
+        db,
+        report.org_id,
+        period=report.period_label,
+        source_job_ids=source_job_ids,
+        domains=domains,
+    )
 
     if report.data_digest is not None:
         frozen = digest_from_dict(report.data_digest)
@@ -182,7 +220,7 @@ def hydrate_report_insights(
     if digest_has_data(live_digest):
         return _bundle_from_live(db, report, insights_source="legacy")
 
-    coverage = build_data_coverage(live_digest)
+    coverage = build_data_coverage(live_digest, primary_domain=primary_domain)
     metadata = {**_legacy_metadata(report, coverage), "insights_source": "legacy"}
     return ReportInsightsBundle(
         data_digest=live_digest.to_dict(),

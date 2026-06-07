@@ -71,6 +71,9 @@ def persist_canonical(
                     vendor_id=rec.vendor_id,
                     name=rec.vendor_name or rec.vendor_id,
                     balance=float(rec.balance),
+                    days_overdue=rec.days_overdue or None,
+                    aging_bucket=rec.aging_bucket,
+                    bucket_breakdown=rec.bucket_breakdown or None,
                     period_label=period,
                     source_job_id=job_id,
                 )

@@ -12,6 +12,56 @@ from app.services.transforms.snapshot import get_prior_snapshot
 
 
 @dataclass
+class RuleScope:
+    period: str | None = None
+    source_job_ids: list[UUID] | None = None
+    domains: set[str] | None = None
+
+    def includes(self, domain: str) -> bool:
+        return self.domains is None or domain in self.domains
+
+
+def _invoice_query(db: Session, org_id: UUID, scope: RuleScope | None = None):
+    q = db.query(Invoice).filter(Invoice.org_id == org_id)
+    if scope:
+        if scope.period:
+            q = q.filter(Invoice.period_label == scope.period)
+        if scope.source_job_ids:
+            q = q.filter(Invoice.source_job_id.in_(scope.source_job_ids))
+    return q
+
+
+def _vendor_query(db: Session, org_id: UUID, scope: RuleScope | None = None):
+    q = db.query(Vendor).filter(Vendor.org_id == org_id)
+    if scope:
+        if scope.period:
+            q = q.filter(Vendor.period_label == scope.period)
+        if scope.source_job_ids:
+            q = q.filter(Vendor.source_job_id.in_(scope.source_job_ids))
+    return q
+
+
+def _gl_query(db: Session, org_id: UUID, scope: RuleScope | None = None):
+    q = db.query(GlTransaction).filter(GlTransaction.org_id == org_id)
+    if scope:
+        if scope.period:
+            q = q.filter(GlTransaction.period_label == scope.period)
+        if scope.source_job_ids:
+            q = q.filter(GlTransaction.source_job_id.in_(scope.source_job_ids))
+    return q
+
+
+def _inventory_query(db: Session, org_id: UUID, scope: RuleScope | None = None):
+    q = db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
+    if scope:
+        if scope.period:
+            q = q.filter(InventoryItem.period_label == scope.period)
+        if scope.source_job_ids:
+            q = q.filter(InventoryItem.source_job_id.in_(scope.source_job_ids))
+    return q
+
+
+@dataclass
 class RuleFinding:
     finding_type: str
     title: str
@@ -43,22 +93,34 @@ class RuleFinding:
         }
 
 
-def run_rules(db: Session, org_id: UUID) -> list[RuleFinding]:
+def run_rules(
+    db: Session,
+    org_id: UUID,
+    *,
+    period: str | None = None,
+    source_job_ids: list[UUID] | None = None,
+    domains: set[str] | None = None,
+) -> list[RuleFinding]:
+    scope = RuleScope(period=period, source_job_ids=source_job_ids, domains=domains)
     findings: list[RuleFinding] = []
-    findings.extend(_check_ar_zero_amounts(db, org_id))
-    findings.extend(_check_ar_aging_spike(db, org_id))
-    findings.extend(_check_customer_concentration(db, org_id))
-    findings.extend(_check_duplicate_customers(db, org_id))
-    findings.extend(_check_ap_negative(db, org_id))
-    findings.extend(_check_vendor_concentration(db, org_id))
-    findings.extend(_check_vendor_name_concentration(db, org_id))
-    findings.extend(_check_inventory_adjustments(db, org_id))
-    findings.extend(_check_orphan_inventory(db, org_id))
-    findings.extend(_check_negative_inventory(db, org_id))
-    findings.extend(_check_zero_or_dead_stock_signals(db, org_id))
-    findings.extend(_check_missing_gl_mappings(db, org_id))
-    findings.extend(_check_invalid_aging_buckets(db, org_id))
-    findings.extend(_check_duplicate_vendors(db, org_id))
+    if scope.includes("ar"):
+        findings.extend(_check_ar_zero_amounts(db, org_id, scope))
+        findings.extend(_check_ar_aging_spike(db, org_id, scope))
+        findings.extend(_check_customer_concentration(db, org_id, scope))
+        findings.extend(_check_duplicate_customers(db, org_id, scope))
+        findings.extend(_check_invalid_aging_buckets(db, org_id, scope))
+    if scope.includes("ap"):
+        findings.extend(_check_ap_negative(db, org_id, scope))
+        findings.extend(_check_vendor_concentration(db, org_id, scope))
+        findings.extend(_check_vendor_name_concentration(db, org_id, scope))
+        findings.extend(_check_duplicate_vendors(db, org_id, scope))
+    if scope.includes("inventory"):
+        findings.extend(_check_inventory_adjustments(db, org_id, scope))
+        findings.extend(_check_orphan_inventory(db, org_id, scope))
+        findings.extend(_check_negative_inventory(db, org_id, scope))
+        findings.extend(_check_zero_or_dead_stock_signals(db, org_id, scope))
+    if scope.includes("gl"):
+        findings.extend(_check_missing_gl_mappings(db, org_id, scope))
     return findings
 
 
@@ -143,13 +205,10 @@ def _check_snapshot_deltas(db: Session, org_id: UUID) -> list[RuleFinding]:
     return results
 
 
-def _check_ar_zero_amounts(db: Session, org_id: UUID) -> list[RuleFinding]:
-    row_count = (
-        db.query(func.count(Invoice.id)).filter(Invoice.org_id == org_id).scalar() or 0
-    )
-    total = (
-        db.query(func.sum(Invoice.amount)).filter(Invoice.org_id == org_id).scalar() or 0
-    )
+def _check_ar_zero_amounts(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
+    base = _invoice_query(db, org_id, scope)
+    row_count = base.with_entities(func.count(Invoice.id)).scalar() or 0
+    total = base.with_entities(func.sum(Invoice.amount)).scalar() or 0
     if row_count <= 0 or float(total or 0) > 0:
         return []
     return [
@@ -172,16 +231,12 @@ def _check_ar_zero_amounts(db: Session, org_id: UUID) -> list[RuleFinding]:
     ]
 
 
-def _check_ar_aging_spike(db: Session, org_id: UUID) -> list[RuleFinding]:
+def _check_ar_aging_spike(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
+    base = _invoice_query(db, org_id, scope)
     over_90 = (
-        db.query(func.sum(Invoice.amount))
-        .filter(Invoice.org_id == org_id, Invoice.days_overdue >= 90)
-        .scalar()
-        or 0
+        base.filter(Invoice.days_overdue >= 90).with_entities(func.sum(Invoice.amount)).scalar() or 0
     )
-    total = (
-        db.query(func.sum(Invoice.amount)).filter(Invoice.org_id == org_id).scalar() or 0
-    )
+    total = base.with_entities(func.sum(Invoice.amount)).scalar() or 0
     if total <= 0:
         return []
     pct = (over_90 / total) * 100
@@ -202,10 +257,10 @@ def _check_ar_aging_spike(db: Session, org_id: UUID) -> list[RuleFinding]:
     ]
 
 
-def _check_customer_concentration(db: Session, org_id: UUID) -> list[RuleFinding]:
+def _check_customer_concentration(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
     rows = (
-        db.query(Invoice.customer_id, func.sum(Invoice.amount))
-        .filter(Invoice.org_id == org_id)
+        _invoice_query(db, org_id, scope)
+        .with_entities(Invoice.customer_id, func.sum(Invoice.amount))
         .group_by(Invoice.customer_id)
         .all()
     )
@@ -270,8 +325,8 @@ def _check_duplicate_customers(db: Session, org_id: UUID) -> list[RuleFinding]:
     ]
 
 
-def _check_ap_negative(db: Session, org_id: UUID) -> list[RuleFinding]:
-    negatives = db.query(Vendor).filter(Vendor.org_id == org_id, Vendor.balance < 0).all()
+def _check_ap_negative(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
+    negatives = _vendor_query(db, org_id, scope).filter(Vendor.balance < 0).all()
     if not negatives:
         return []
     return [
@@ -289,8 +344,8 @@ def _check_ap_negative(db: Session, org_id: UUID) -> list[RuleFinding]:
     ]
 
 
-def _check_vendor_concentration(db: Session, org_id: UUID) -> list[RuleFinding]:
-    vendors = db.query(Vendor).filter(Vendor.org_id == org_id, Vendor.balance > 0).all()
+def _check_vendor_concentration(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
+    vendors = _vendor_query(db, org_id, scope).filter(Vendor.balance > 0).all()
     if len(vendors) < 3:
         return []
     total = sum(v.balance or 0 for v in vendors)
@@ -315,9 +370,9 @@ def _check_vendor_concentration(db: Session, org_id: UUID) -> list[RuleFinding]:
     ]
 
 
-def _check_vendor_name_concentration(db: Session, org_id: UUID) -> list[RuleFinding]:
+def _check_vendor_name_concentration(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
     """Combine vendors sharing a normalized name (same supplier, multiple IDs)."""
-    vendors = db.query(Vendor).filter(Vendor.org_id == org_id, Vendor.balance > 0).all()
+    vendors = _vendor_query(db, org_id, scope).filter(Vendor.balance > 0).all()
     if len(vendors) < 3:
         return []
     total = sum(v.balance or 0 for v in vendors)
@@ -360,9 +415,9 @@ def _check_vendor_name_concentration(db: Session, org_id: UUID) -> list[RuleFind
     ]
 
 
-def _check_inventory_adjustments(db: Session, org_id: UUID) -> list[RuleFinding]:
+def _check_inventory_adjustments(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
     adj_keywords = ["adjustment", "adj", "write-off", "writeoff", "shrinkage"]
-    gl_rows = db.query(GlTransaction).filter(GlTransaction.org_id == org_id).all()
+    gl_rows = _gl_query(db, org_id, scope).all()
     adj_total = 0.0
     for row in gl_rows:
         name = (row.account_name or row.account_id or "").lower()
@@ -385,13 +440,10 @@ def _check_inventory_adjustments(db: Session, org_id: UUID) -> list[RuleFinding]
     ]
 
 
-def _check_orphan_inventory(db: Session, org_id: UUID) -> list[RuleFinding]:
+def _check_orphan_inventory(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
     orphans = (
-        db.query(InventoryItem)
-        .filter(
-            InventoryItem.org_id == org_id,
-            (InventoryItem.gl_account == None) | (InventoryItem.gl_account == ""),  # noqa: E711
-        )
+        _inventory_query(db, org_id, scope)
+        .filter((InventoryItem.gl_account == None) | (InventoryItem.gl_account == ""))  # noqa: E711
         .count()
     )
     if orphans == 0:
@@ -411,12 +463,8 @@ def _check_orphan_inventory(db: Session, org_id: UUID) -> list[RuleFinding]:
     ]
 
 
-def _check_negative_inventory(db: Session, org_id: UUID) -> list[RuleFinding]:
-    items = (
-        db.query(InventoryItem)
-        .filter(InventoryItem.org_id == org_id, InventoryItem.quantity < 0)
-        .all()
-    )
+def _check_negative_inventory(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
+    items = _inventory_query(db, org_id, scope).filter(InventoryItem.quantity < 0).all()
     if not items:
         return []
     skus = ", ".join(sorted({(i.sku or i.item_id) for i in items})[:5])
@@ -438,7 +486,7 @@ def _check_negative_inventory(db: Session, org_id: UUID) -> list[RuleFinding]:
     ]
 
 
-def _check_zero_or_dead_stock_signals(db: Session, org_id: UUID) -> list[RuleFinding]:
+def _check_zero_or_dead_stock_signals(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
     """Zero stock is only material when it is widespread.
 
     Without demand / open-order data we cannot prove a stockout vs. an obsolete
@@ -446,12 +494,8 @@ def _check_zero_or_dead_stock_signals(db: Session, org_id: UUID) -> list[RuleFin
     data/operational signal worth review). Phase 3 will refine this using recent
     demand and open sales/work orders.
     """
-    zero = (
-        db.query(InventoryItem)
-        .filter(InventoryItem.org_id == org_id, InventoryItem.quantity == 0)
-        .count()
-    )
-    total = db.query(InventoryItem).filter(InventoryItem.org_id == org_id).count()
+    zero = _inventory_query(db, org_id, scope).filter(InventoryItem.quantity == 0).count()
+    total = _inventory_query(db, org_id, scope).count()
     if total == 0:
         return []
     pct = (zero / total) * 100
@@ -475,13 +519,10 @@ def _check_zero_or_dead_stock_signals(db: Session, org_id: UUID) -> list[RuleFin
     ]
 
 
-def _check_missing_gl_mappings(db: Session, org_id: UUID) -> list[RuleFinding]:
+def _check_missing_gl_mappings(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
     missing = (
-        db.query(GlTransaction)
-        .filter(
-            GlTransaction.org_id == org_id,
-            (GlTransaction.account_id == None) | (GlTransaction.account_id == ""),  # noqa: E711
-        )
+        _gl_query(db, org_id, scope)
+        .filter((GlTransaction.account_id == None) | (GlTransaction.account_id == ""))  # noqa: E711
         .count()
     )
     if missing == 0:
@@ -501,11 +542,11 @@ def _check_missing_gl_mappings(db: Session, org_id: UUID) -> list[RuleFinding]:
     ]
 
 
-def _check_invalid_aging_buckets(db: Session, org_id: UUID) -> list[RuleFinding]:
+def _check_invalid_aging_buckets(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
     valid = {"current", "1-30", "31-60", "61-90", "91-120", "90+", ">90", "over 90"}
     invalid = (
-        db.query(Invoice)
-        .filter(Invoice.org_id == org_id, Invoice.aging_bucket != None, Invoice.aging_bucket != "")  # noqa: E711
+        _invoice_query(db, org_id, scope)
+        .filter(Invoice.aging_bucket != None, Invoice.aging_bucket != "")  # noqa: E711
         .all()
     )
     bad = [i for i in invalid if i.aging_bucket.lower() not in valid and not any(v in i.aging_bucket.lower() for v in ["90", "120"])]
@@ -526,8 +567,8 @@ def _check_invalid_aging_buckets(db: Session, org_id: UUID) -> list[RuleFinding]
     ]
 
 
-def _check_duplicate_vendors(db: Session, org_id: UUID) -> list[RuleFinding]:
-    vendors = db.query(Vendor).filter(Vendor.org_id == org_id).all()
+def _check_duplicate_vendors(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
+    vendors = _vendor_query(db, org_id, scope).all()
     names: dict[str, list] = {}
     for v in vendors:
         key = (v.name or "").lower().strip()

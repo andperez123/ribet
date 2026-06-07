@@ -20,6 +20,9 @@ class CanonicalAPRecord(BaseModel):
     vendor_id: str
     vendor_name: str | None = None
     balance: Decimal = Decimal("0")
+    days_overdue: int = 0
+    aging_bucket: str | None = None
+    bucket_breakdown: dict[str, float] = Field(default_factory=dict)
 
 
 class CanonicalGLTransaction(BaseModel):

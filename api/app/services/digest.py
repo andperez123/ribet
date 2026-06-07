@@ -43,6 +43,12 @@ class DataDigest:
     ap_negative_total: float = 0.0
     vendor_count: int = 0
     top_vendors: list[TopEntry] = field(default_factory=list)
+    ap_current: float = 0.0
+    ap_1_30: float = 0.0
+    ap_31_60: float = 0.0
+    ap_61_90: float = 0.0
+    ap_91_plus: float = 0.0
+    ap_over_60_pct: float = 0.0
 
     gl_txn_count: int = 0
     gl_adjustment_total: float = 0.0
@@ -61,40 +67,68 @@ class DataDigest:
         return d
 
 
+_REPORT_TYPE_DOMAINS: dict[str, set[str]] = {
+    "ar_aging": {"ar"},
+    "ap_aging": {"ap"},
+    "gl_detail": {"gl"},
+    "inventory": {"inventory"},
+}
+
+
+def domains_for_report_type(report_type: str | None) -> set[str] | None:
+    if not report_type:
+        return None
+    return _REPORT_TYPE_DOMAINS.get(report_type)
+
+
 def build_data_digest(
     db: Session,
     org_id: UUID,
     top_n: int = 5,
     period: str | None = None,
+    source_job_ids: list[UUID] | None = None,
+    domains: set[str] | None = None,
 ) -> DataDigest:
     digest = DataDigest()
+    include_ar = domains is None or "ar" in domains
+    include_ap = domains is None or "ap" in domains
+    include_gl = domains is None or "gl" in domains
+    include_inventory = domains is None or "inventory" in domains
+
+    def _apply_job_filter(q, model):
+        if source_job_ids:
+            q = q.filter(model.source_job_id.in_(source_job_ids))
+        return q
 
     def _invoice_q():
         q = db.query(Invoice).filter(Invoice.org_id == org_id)
         if period:
             q = q.filter(Invoice.period_label == period)
-        return q
+        return _apply_job_filter(q, Invoice)
 
     def _vendor_q():
         q = db.query(Vendor).filter(Vendor.org_id == org_id)
         if period:
             q = q.filter(Vendor.period_label == period)
-        return q
+        return _apply_job_filter(q, Vendor)
 
     def _gl_q():
         q = db.query(GlTransaction).filter(GlTransaction.org_id == org_id)
         if period:
             q = q.filter(GlTransaction.period_label == period)
-        return q
+        return _apply_job_filter(q, GlTransaction)
 
     def _inv_q():
         q = db.query(InventoryItem).filter(InventoryItem.org_id == org_id)
         if period:
             q = q.filter(InventoryItem.period_label == period)
-        return q
+        return _apply_job_filter(q, InventoryItem)
 
     # --- Accounts Receivable ---
-    inv_base = _invoice_q()
+    if not include_ar:
+        inv_base = _invoice_q().filter(Invoice.id == None)  # noqa: E711
+    else:
+        inv_base = _invoice_q()
     digest.ar_total = float(
         inv_base.with_entities(func.sum(Invoice.amount)).scalar() or 0
     )
@@ -133,30 +167,49 @@ def build_data_digest(
         )
 
     # --- Accounts Payable (name-normalized to combine split vendor records) ---
-    vendors = _vendor_q().all()
-    digest.vendor_count = len(vendors)
-    digest.ap_negative_total = float(sum(v.balance or 0 for v in vendors if (v.balance or 0) < 0))
-    positive = [v for v in vendors if (v.balance or 0) > 0]
-    digest.ap_total = float(sum(v.balance or 0 for v in positive))
-    by_name: dict[str, dict] = {}
-    for v in positive:
-        key = _normalize_name(v.name) or v.vendor_id
-        entry = by_name.setdefault(key, {"name": v.name or v.vendor_id, "balance": 0.0, "ids": set()})
-        entry["balance"] += v.balance or 0
-        entry["ids"].add(v.vendor_id)
-    for entry in sorted(by_name.values(), key=lambda e: e["balance"], reverse=True)[:top_n]:
-        ids = sorted(entry["ids"])
-        digest.top_vendors.append(
-            TopEntry(
-                label=entry["name"],
-                amount=entry["balance"],
-                pct=(entry["balance"] / digest.ap_total * 100) if digest.ap_total > 0 else 0.0,
-                detail=f"{len(ids)} vendor ID(s): {', '.join(ids)}" if len(ids) > 1 else "",
+    if include_ap:
+        vendors = _vendor_q().all()
+        digest.vendor_count = len(vendors)
+        digest.ap_negative_total = float(sum(v.balance or 0 for v in vendors if (v.balance or 0) < 0))
+        positive = [v for v in vendors if (v.balance or 0) > 0]
+        digest.ap_total = float(sum(v.balance or 0 for v in positive))
+        bucket_totals = {"current": 0.0, "1_30": 0.0, "31_60": 0.0, "61_90": 0.0, "91_plus": 0.0, "over_120": 0.0}
+        for v in positive:
+            breakdown = v.bucket_breakdown or {}
+            for key, amt in breakdown.items():
+                if key in bucket_totals:
+                    bucket_totals[key] += float(amt or 0)
+        digest.ap_current = bucket_totals["current"]
+        digest.ap_1_30 = bucket_totals["1_30"]
+        digest.ap_31_60 = bucket_totals["31_60"]
+        digest.ap_61_90 = bucket_totals["61_90"]
+        digest.ap_91_plus = bucket_totals["91_plus"] + bucket_totals["over_120"]
+        bucket_sum = sum(bucket_totals.values())
+        if bucket_sum > 0:
+            over_60 = digest.ap_31_60 + digest.ap_61_90 + digest.ap_91_plus
+            digest.ap_over_60_pct = over_60 / bucket_sum * 100
+        by_name: dict[str, dict] = {}
+        for v in positive:
+            key = _normalize_name(v.name) or v.vendor_id
+            entry = by_name.setdefault(key, {"name": v.name or v.vendor_id, "balance": 0.0, "ids": set()})
+            entry["balance"] += v.balance or 0
+            entry["ids"].add(v.vendor_id)
+        for entry in sorted(by_name.values(), key=lambda e: e["balance"], reverse=True)[:top_n]:
+            ids = sorted(entry["ids"])
+            digest.top_vendors.append(
+                TopEntry(
+                    label=entry["name"],
+                    amount=entry["balance"],
+                    pct=(entry["balance"] / digest.ap_total * 100) if digest.ap_total > 0 else 0.0,
+                    detail=f"{len(ids)} vendor ID(s): {', '.join(ids)}" if len(ids) > 1 else "",
+                )
             )
-        )
 
     # --- General Ledger ---
-    gl_rows = _gl_q().all()
+    if not include_gl:
+        gl_rows = []
+    else:
+        gl_rows = _gl_q().all()
     digest.gl_txn_count = len(gl_rows)
     digest.gl_adjustment_total = float(
         sum(
@@ -168,7 +221,10 @@ def build_data_digest(
     digest.gl_unmapped_count = sum(1 for r in gl_rows if not (r.account_id or "").strip())
 
     # --- Inventory ---
-    inv = _inv_q().all()
+    if not include_inventory:
+        inv = []
+    else:
+        inv = _inv_q().all()
     digest.inventory_item_count = len(inv)
     digest.inventory_total_qty = float(sum(i.quantity or 0 for i in inv))
     digest.inventory_negative_count = sum(1 for i in inv if (i.quantity or 0) < 0)
@@ -178,17 +234,31 @@ def build_data_digest(
     return digest
 
 
-def build_data_coverage(digest: DataDigest) -> dict[str, bool]:
-    return {
-        "ar": digest.ar_total > 0 or digest.ar_invoice_count > 0,
-        "ap": digest.ap_total > 0 or digest.vendor_count > 0,
+def build_data_coverage(
+    digest: DataDigest,
+    *,
+    primary_domain: str | None = None,
+) -> dict:
+    ap_buckets = (
+        digest.ap_current + digest.ap_1_30 + digest.ap_31_60 + digest.ap_61_90 + digest.ap_91_plus
+    )
+    coverage = {
+        "ar": digest.ar_total > 0,
+        "ap": digest.ap_total > 0,
         "gl": digest.gl_txn_count > 0,
         "inventory": digest.inventory_item_count > 0,
+        "ar_present": digest.ar_invoice_count > 0,
+        "ar_unmapped": digest.ar_invoice_count > 0 and digest.ar_total <= 0,
+        "ap_aging_available": ap_buckets > 0,
     }
+    if primary_domain:
+        coverage["primary_domain"] = primary_domain
+    return coverage
 
 
 def digest_has_data(digest: DataDigest) -> bool:
-    return any(build_data_coverage(digest).values())
+    cov = build_data_coverage(digest)
+    return any(cov.get(k) for k in ("ar", "ap", "gl", "inventory"))
 
 
 @dataclass
@@ -312,6 +382,26 @@ def build_domain_insights(digest: DataDigest, findings) -> list[DomainInsight]:
                     severity="watch" if tv.pct >= 30 else "info",
                     metric_label="Share of AP",
                     metric_value=f"{tv.pct:.1f}%",
+                )
+            )
+        ap_bucket_total = (
+            digest.ap_current + digest.ap_1_30 + digest.ap_31_60 + digest.ap_61_90 + digest.ap_91_plus
+        )
+        if ap_bucket_total > 0:
+            overdue = digest.ap_31_60 + digest.ap_61_90 + digest.ap_91_plus
+            overdue_pct = overdue / ap_bucket_total * 100
+            ap_age_sev = "alert" if overdue_pct >= 50 else ("watch" if overdue_pct >= 30 else "info")
+            insights.append(
+                DomainInsight(
+                    domain="ap",
+                    title="AP aging breakdown",
+                    body=(
+                        f"${digest.ap_current:,.0f} current, ${digest.ap_31_60:,.0f} in 31–60 days, "
+                        f"${digest.ap_61_90:,.0f} in 61–90 days, ${digest.ap_91_plus:,.0f} over 90 days."
+                    ),
+                    severity=ap_age_sev,
+                    metric_label="AP over 60 days",
+                    metric_value=f"{digest.ap_over_60_pct:.1f}%",
                 )
             )
 

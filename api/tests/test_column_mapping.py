@@ -1,4 +1,4 @@
-"""Column mapping and bucket AR ingest tests."""
+"""Column mapping and bucket AR/AP ingest tests."""
 
 from pathlib import Path
 from uuid import uuid4
@@ -10,9 +10,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base
-from app.models import Invoice, Organization
-from app.services.digest import build_data_digest
-from app.services.etl.aliases import normalize_columns
+from app.models import Invoice, Organization, Vendor
+from app.services.digest import build_data_coverage, build_data_digest, domains_for_report_type
+from app.services.etl.aliases import detect_aging_bucket_columns, normalize_columns
 from app.services.report_insights import hydrate_report_insights
 from app.services.transforms.adapters.generic import dataframe_to_canonical
 from app.services.transforms.persist import persist_canonical
@@ -54,6 +54,48 @@ def test_customer_total_maps_to_amount_not_customer_name():
     assert "Current" not in mapping
 
 
+def test_ap_user_format_headers_detect_buckets():
+    cols = [
+        "Vendor Name",
+        "Total Owed ($)",
+        "Current (0-30 Days)",
+        "31-60 Days",
+        "61-90 Days",
+        "91+ Days",
+    ]
+    mapping = normalize_columns(cols)
+    buckets = detect_aging_bucket_columns(cols)
+    assert len(buckets) == 4
+    assert mapping.get("Vendor Name") == "vendor_name"
+    assert mapping.get("Total Owed ($)") == "amount"
+    assert "31-60 Days" not in mapping
+    assert "Current (0-30 Days)" not in mapping
+
+
+def test_ap_user_format_ingest_with_bucket_breakdown(db):
+    session, org = db
+    df = pd.read_csv(FIXTURES / "ap_aging_user_format.csv")
+    dataset = dataframe_to_canonical("ap_aging", df)
+    assert len(dataset.ap) == 4
+    assert sum(float(v.balance) for v in dataset.ap) == 56350
+    bluescope = next(v for v in dataset.ap if "BlueScope" in (v.vendor_name or ""))
+    assert bluescope.bucket_breakdown.get("31_60") == 26500
+    assert bluescope.bucket_breakdown.get("current") == 15500
+
+    job_id = uuid4()
+    persist_canonical(session, org.id, job_id, "2026-06", dataset)
+    session.commit()
+
+    digest = build_data_digest(session, org.id, period="2026-06", source_job_ids=[job_id])
+    assert digest.ap_total == 56350
+    assert digest.ap_31_60 == 29800
+    assert digest.ap_current == 26550
+    coverage = build_data_coverage(digest, primary_domain="ap")
+    assert coverage["ap"] is True
+    assert coverage["ap_aging_available"] is True
+    assert coverage["ar"] is False
+
+
 def test_bucket_ar_aging_sums_amounts(db):
     session, org = db
     df = pd.read_csv(FIXTURES / "ar_aging_buckets.csv")
@@ -70,6 +112,89 @@ def test_bucket_ar_aging_sums_amounts(db):
 
     total = session.query(func.sum(Invoice.amount)).filter(Invoice.org_id == org.id).scalar()
     assert float(total or 0) > 100_000
+
+
+def test_ar_user_format_ingest(db):
+    session, org = db
+    df = pd.read_csv(FIXTURES / "ar_aging_user_format.csv")
+    dataset = dataframe_to_canonical("ar_aging", df)
+    assert len(dataset.ar) == 6
+    assert all(r.amount > 0 for r in dataset.ar)
+    assert all(not str(r.customer_name or "").isdigit() for r in dataset.ar)
+
+
+def test_mismapped_ar_filters_numeric_customers(db):
+    session, org = db
+    df = pd.read_csv(FIXTURES / "ar_aging_mismapped.csv")
+    dataset = dataframe_to_canonical("ar_aging", df)
+    assert len(dataset.ar) == 0
+
+
+def test_coverage_ar_unmapped_without_dollar_kpis(db):
+    session, org = db
+    df = pd.read_csv(FIXTURES / "ar_aging_mismapped.csv")
+    dataset = dataframe_to_canonical("ar_aging", df)
+    if dataset.ar:
+        persist_canonical(session, org.id, uuid4(), "2026-06", dataset)
+        session.commit()
+
+    bad_rows = [
+        Invoice(
+            org_id=org.id,
+            invoice_id=f"inv-{i}",
+            customer_id=str(14200 + i * 1000),
+            amount=0,
+            period_label="2026-06",
+        )
+        for i in range(6)
+    ]
+    for row in bad_rows:
+        session.add(row)
+    session.commit()
+
+    digest = build_data_digest(session, org.id, period="2026-06")
+    coverage = build_data_coverage(digest)
+    assert coverage["ar"] is False
+    assert coverage["ar_unmapped"] is True
+    assert coverage["ar_present"] is True
+
+
+def test_ap_report_scoping_excludes_stale_ar(db):
+    session, org = db
+    ar_job = uuid4()
+    ap_job = uuid4()
+
+    ar_df = pd.read_csv(FIXTURES / "ar_aging_mismapped.csv")
+    for i in range(6):
+        session.add(
+            Invoice(
+                org_id=org.id,
+                invoice_id=f"bad-{i}",
+                customer_id=str(14200 + i * 1000),
+                amount=0,
+                period_label="2026-06",
+                source_job_id=ar_job,
+            )
+        )
+
+    ap_df = pd.read_csv(FIXTURES / "ap_aging_user_format.csv")
+    ap_dataset = dataframe_to_canonical("ap_aging", ap_df)
+    persist_canonical(session, org.id, ap_job, "2026-06", ap_dataset)
+    session.commit()
+
+    all_digest = build_data_digest(session, org.id, period="2026-06")
+    assert all_digest.ar_invoice_count == 6
+    assert all_digest.ap_total == 56350
+
+    scoped = build_data_digest(
+        session,
+        org.id,
+        period="2026-06",
+        source_job_ids=[ap_job],
+        domains=domains_for_report_type("ap_aging"),
+    )
+    assert scoped.ar_invoice_count == 0
+    assert scoped.ap_total == 56350
 
 
 def test_customer_total_column_uses_buckets_when_present(db):

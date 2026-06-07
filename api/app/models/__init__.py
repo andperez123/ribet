@@ -304,6 +304,9 @@ class Vendor(Base):
     vendor_id: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(512))
     balance: Mapped[Optional[float]] = mapped_column(Float)
+    days_overdue: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    aging_bucket: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    bucket_breakdown: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
     period_label: Mapped[str] = mapped_column(String(16), default="unknown")
     source_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
 

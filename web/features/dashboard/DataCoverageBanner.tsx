@@ -1,9 +1,15 @@
 import { Card } from "@/components/ui/Card";
 import { formatCoverageSummary } from "@/lib/dashboard/utils";
-import type { DataCoverage } from "@/lib/types/report";
+import type { DataCoverage, DataDigest } from "@/lib/types/report";
 
-export function DataCoverageBanner({ coverage }: { coverage: DataCoverage }) {
-  const message = formatCoverageSummary(coverage);
+export function DataCoverageBanner({
+  coverage,
+  digest,
+}: {
+  coverage: DataCoverage;
+  digest?: DataDigest;
+}) {
+  const message = formatCoverageSummary(coverage, digest);
   if (!message) return null;
 
   const analyzed = Object.entries(coverage).filter(([, v]) => v).length;
