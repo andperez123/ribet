@@ -93,6 +93,7 @@ def test_delete_report_removes_report_and_findings(client):
     )
     db.commit()
     report_id = report.id
+    job_id = job.id
     db.close()
 
     res = client.delete(f"/v1/reports/{report_id}", headers=_headers(org_id))
@@ -107,7 +108,7 @@ def test_delete_report_removes_report_and_findings(client):
         .count()
     )
     assert findings == 0
-    refreshed_job = db.get(IngestJob, job.id)
+    refreshed_job = db.get(IngestJob, job_id)
     assert refreshed_job is not None
     assert refreshed_job.report_id is None
     db.close()

@@ -300,14 +300,11 @@ def _check_customer_concentration(db: Session, org_id: UUID, scope: RuleScope | 
     ]
 
 
-def _check_duplicate_customers(db: Session, org_id: UUID) -> list[RuleFinding]:
-    dupes = (
-        db.query(Customer.customer_id, func.count(Customer.id))
-        .filter(Customer.org_id == org_id)
-        .group_by(Customer.customer_id)
-        .having(func.count(Customer.id) > 1)
-        .all()
-    )
+def _check_duplicate_customers(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
+    q = db.query(Customer.customer_id, func.count(Customer.id)).filter(Customer.org_id == org_id)
+    if scope and scope.source_job_ids:
+        q = q.filter(Customer.source_job_id.in_(scope.source_job_ids))
+    dupes = q.group_by(Customer.customer_id).having(func.count(Customer.id) > 1).all()
     if not dupes:
         return []
     return [
