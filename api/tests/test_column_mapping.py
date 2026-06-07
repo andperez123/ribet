@@ -38,6 +38,14 @@ def db():
     session.close()
 
 
+def test_vendor_name_maps_to_vendor_not_customer():
+    cols = ["Vendor ID", "Vendor Name", "Open Balance"]
+    mapping = normalize_columns(cols)
+    assert mapping.get("Vendor Name") == "vendor_name"
+    assert mapping.get("Vendor ID") == "vendor_id"
+    assert mapping.get("Open Balance") == "amount"
+
+
 def test_customer_total_maps_to_amount_not_customer_name():
     cols = ["Customer", "Customer Total", "Current", "1-30", "Over 90"]
     mapping = normalize_columns(cols)

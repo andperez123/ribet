@@ -106,6 +106,16 @@ def _score_column(header: str, canonical: str, aliases: list[str]) -> float:
             best *= 0.1
         elif _is_entity_name_header(header):
             best = min(1.0, best + 0.15)
+        vendor_tokens = _tokenize(header) & frozenset({"vendor", "supplier"})
+        customer_tokens = _tokenize(header) & frozenset({"customer", "client", "cust"})
+        if canonical in ("customer_name", "customer_id") and vendor_tokens:
+            best *= 0.05
+        elif canonical in ("customer_name", "customer_id") and customer_tokens:
+            best = min(1.0, best + 0.2)
+        elif canonical in ("vendor_name", "vendor_id") and customer_tokens:
+            best *= 0.05
+        elif canonical in ("vendor_name", "vendor_id") and vendor_tokens:
+            best = min(1.0, best + 0.2)
 
     if canonical == "customer_name" and "total" in lower and "customer" in lower:
         best *= 0.05
