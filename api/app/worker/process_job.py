@@ -15,6 +15,15 @@ from app.services.events import emit_event
 from app.services.telemetry import track_stage
 from app.services.progress import recompute_org_progress
 from app.services.analysis import run_operational_analysis
+from app.services.job_errors import (
+    JobError,
+    format_traceback,
+    from_exception,
+    org_not_found,
+    scrub_detail_for_log,
+    sector_disabled,
+    unknown_report_type,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,39 +57,57 @@ def claim_job(db) -> IngestJob | None:
     return db.get(IngestJob, row[0])
 
 
-def _fail_job(db, job: IngestJob, message: str) -> None:
+def _fail_job(db, job: IngestJob, err: JobError | str) -> None:
+    if isinstance(err, str):
+        from app.services.job_errors import normalize_stored_error
+
+        normalized = normalize_stored_error(err)
+        job_error = JobError(
+            code=normalized["code"] or "processing_failed",
+            message=normalized["message"] or err,
+            hint=normalized.get("hint"),
+            detail=normalized.get("detail"),
+        )
+    else:
+        job_error = err
+
+    payload = job_error.to_dict()
     job.status = "error"
-    job.errors = [message]
+    job.errors = [payload]
     emit_event(
         db,
         "job_failed",
         org_id=job.org_id,
         job_id=job.id,
-        metadata={"error": message, "file_name": job.file_name},
+        metadata={
+            "file_name": job.file_name,
+            "error_code": job_error.code,
+            "error_message": job_error.message,
+            "error_detail": scrub_detail_for_log(job_error.detail),
+            "intake_metadata": job.intake_metadata,
+        },
     )
     db.commit()
-    logger.info(
-        "job_failed org_id=%s job_id=%s file_name=%s error=%s",
+    logger.error(
+        "job_failed org_id=%s job_id=%s file_name=%s code=%s message=%s detail=%s",
         job.org_id,
         job.id,
         job.file_name,
-        message,
+        job_error.code,
+        job_error.message,
+        job_error.detail,
     )
 
 
 def process_job(db, job: IngestJob) -> None:
     org = db.get(Organization, job.org_id)
     if not org:
-        _fail_job(db, job, "Organization not found")
+        _fail_job(db, job, org_not_found())
         return
 
     try:
         if job.sector in ("orders", "sales"):
-            _fail_job(
-                db,
-                job,
-                f"Sector '{job.sector}' is not enabled yet. Upload financials or manufacturing exports.",
-            )
+            _fail_job(db, job, sector_disabled(job.sector))
             return
 
         with track_stage(
@@ -115,7 +142,14 @@ def process_job(db, job: IngestJob) -> None:
             return
 
         if result.row_count == 0 and result.report_type == "unknown":
-            _fail_job(db, job, "Could not detect report type or parse file")
+            columns: list[str] = []
+            if job.mapping_metadata and isinstance(job.mapping_metadata, dict):
+                columns = list(job.mapping_metadata.get("source_columns") or [])
+            _fail_job(
+                db,
+                job,
+                unknown_report_type(filename=job.file_name, columns=columns),
+            )
             return
 
         with track_stage(
@@ -160,7 +194,16 @@ def process_job(db, job: IngestJob) -> None:
             result.report_type,
         )
     except Exception as e:
-        _fail_job(db, job, str(e))
+        job_error = from_exception(e, filename=job.file_name)
+        if not job_error.detail:
+            job_error.detail = format_traceback(e)
+        logger.exception(
+            "job_exception org_id=%s job_id=%s file_name=%s",
+            job.org_id,
+            job.id,
+            job.file_name,
+        )
+        _fail_job(db, job, job_error)
 
 
 def _start_email_scheduler():

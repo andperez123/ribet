@@ -22,6 +22,7 @@ import {
 } from "@/lib/sectors";
 import type { UploadSector } from "@/lib/types/upload";
 import { MappingReviewPanel } from "./MappingReviewPanel";
+import { UploadJobErrorPanel } from "./UploadJobErrorPanel";
 import { useJobPolling } from "./useJobPolling";
 import { useUpload } from "./useUpload";
 
@@ -86,8 +87,9 @@ export function SectorUploadFlow() {
   const processingCount = files.filter(
     (f) => f.status === "processing" || f.status === "uploading"
   ).length;
+  const errorCount = files.filter((f) => f.status === "error").length;
   const showUploadBanner =
-    filesConfirmed && files.length > 0 && processingCount + doneCount > 0;
+    filesConfirmed && files.length > 0 && processingCount + doneCount > 0 && errorCount === 0;
 
   return (
     <div className="w-full">
@@ -259,6 +261,22 @@ export function SectorUploadFlow() {
         </div>
       )}
 
+      {files.some((f) => f.status === "error") && (
+        <div className="mt-6 space-y-2">
+          {files
+            .filter((f) => f.status === "error" && f.error)
+            .map((f) => (
+              <UploadJobErrorPanel
+                key={f.id}
+                jobId={f.id}
+                fileName={f.name}
+                error={f.error!}
+                intakeMetadata={f.intakeMetadata}
+              />
+            ))}
+        </div>
+      )}
+
       {files.length > 0 && (
         <div className="mt-6 space-y-2">
           {files.map((f) => (
@@ -269,7 +287,7 @@ export function SectorUploadFlow() {
               {f.status === "done" ? (
                 <CheckCircle className="h-4 w-4 shrink-0 text-ribet-green" />
               ) : f.status === "error" ? (
-                <span className="text-ribet-risk text-xs">!</span>
+                <span className="shrink-0 text-xs font-medium text-ribet-risk">Failed</span>
               ) : f.status === "needs_review" ? (
                 <span className="text-amber-400 text-xs">?</span>
               ) : (
@@ -282,7 +300,11 @@ export function SectorUploadFlow() {
                 </Badge>
               )}
               <span className="text-xs capitalize text-ribet-muted">
-                {f.status === "processing" ? "processing" : f.status}
+                {f.status === "processing"
+                  ? "processing"
+                  : f.status === "error"
+                    ? "failed"
+                    : f.status}
               </span>
             </div>
           ))}

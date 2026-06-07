@@ -74,12 +74,16 @@ class MappingPlan:
     column_map: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
+        source_columns = sorted(
+            set(self.column_map.values()) | set(self.unmapped_columns)
+        )
         return {
             "report_type": self.report_type,
             "field_mapping": {k: v.to_dict() for k, v in self.field_mapping.items()},
             "amount_strategy": self.amount_strategy,
             "bucket_columns": self.bucket_columns,
             "unmapped_columns": self.unmapped_columns,
+            "source_columns": source_columns,
             "overall_confidence": round(self.overall_confidence, 3),
             "parse_warnings": self.parse_warnings,
             "column_map": self.column_map,

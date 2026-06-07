@@ -118,6 +118,10 @@ def test_orders_sector_fails_as_coming_soon():
         process_job(db, job)
         db.refresh(job)
         assert job.status == "error"
-        assert job.errors and "not enabled" in job.errors[0].lower()
+        assert job.errors
+        err = job.errors[0]
+        assert isinstance(err, dict)
+        assert err.get("code") == "sector_disabled"
+        assert "not available" in err.get("message", "").lower()
     finally:
         db.close()

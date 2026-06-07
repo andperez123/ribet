@@ -148,13 +148,22 @@ export type WeeklyBrief = {
 
 export type IngestJobRecord = {
   id: string;
-  status: "pending" | "processing" | "done" | "error";
+  status: "pending" | "processing" | "done" | "error" | "needs_review";
   file_name: string;
   sector?: string | null;
-  errors?: string[];
+  errors?: Array<
+    | string
+    | {
+        code: string;
+        message: string;
+        hint?: string | null;
+        detail?: string | null;
+      }
+  >;
   report_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  intake_metadata?: import("@/lib/upload/job-errors").IntakeMetadata | null;
 };
 
 export type IngestJobsResponse = {

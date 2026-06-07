@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DashboardAutoRefresh } from "@/features/dashboard/DashboardAutoRefresh";
+import { DashboardFailedJobsBanner } from "@/features/dashboard/DashboardFailedJobsBanner";
 import { DashboardProcessingBanner } from "@/features/dashboard/DashboardProcessingBanner";
 import { ExecutiveSummaryCards } from "@/features/dashboard/ExecutiveSummaryCards";
 import { FindingsList } from "@/features/dashboard/FindingsList";
@@ -50,6 +51,7 @@ export default async function DashboardPage({
   const hasActiveJobs = jobList.some(
     (j) => j.status === "pending" || j.status === "processing"
   );
+  const hasFailedJobs = jobList.some((j) => j.status === "error");
 
   return (
     <div className="space-y-8">
@@ -89,6 +91,8 @@ export default async function DashboardPage({
           variant={searchParams?.processing === "demo" ? "demo" : "upload"}
         />
       )}
+
+      {hasFailedJobs && <DashboardFailedJobsBanner jobs={jobList} />}
 
       {!report && !hasActiveJobs ? (
         <EmptyState

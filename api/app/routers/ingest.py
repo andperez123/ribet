@@ -10,8 +10,9 @@ from app.config import settings
 from app.database import get_db
 from app.deps import get_organization, verify_api_key
 from app.models import IngestJob, Organization
-from app.schemas import UploadJob, UploadJobsResponse
+from app.schemas import JobErrorOut, UploadJob, UploadJobsResponse
 from app.services.ingest import create_upload_jobs
+from app.services.job_errors import normalize_stored_error
 from app.services.mapping_review import confirm_job_mapping, get_mapping_review
 
 router = APIRouter(prefix="/v1/ingest", tags=["ingest"])
@@ -23,13 +24,17 @@ def _job_to_schema(job: IngestJob) -> UploadJob:
         status=job.status,  # type: ignore
         file_name=job.file_name,
         sector=job.sector,
-        errors=job.errors or [],
+        errors=[
+            JobErrorOut(**normalize_stored_error(err))
+            for err in (job.errors or [])
+        ],
         report_id=job.report_id,
         mapping_status=job.mapping_status,
         mapping_confidence=job.mapping_confidence,
         duplicate_of_job_id=job.duplicate_of_job_id,
         created_at=job.created_at.isoformat() if job.created_at else None,
         updated_at=job.updated_at.isoformat() if job.updated_at else None,
+        intake_metadata=job.intake_metadata if job.status == "error" else None,
     )
 
 

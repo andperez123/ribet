@@ -185,8 +185,17 @@ def _first_nonempty_sheet(xl: pd.ExcelFile) -> str:
     return xl.sheet_names[0]
 
 
-def intake_excel(content: bytes) -> IntakeResult:
-    xl = pd.ExcelFile(io.BytesIO(content))
+def intake_excel(content: bytes, filename: str = "") -> IntakeResult:
+    lower = filename.lower()
+    if lower.endswith(".xls") and not lower.endswith(".xlsx"):
+        raise ValueError(
+            "Legacy .xls workbooks require a separate reader; export as .xlsx or CSV instead"
+        )
+
+    try:
+        xl = pd.ExcelFile(io.BytesIO(content))
+    except Exception as e:
+        raise ValueError(f"Excel read failed: {e}") from e
     sheet = _first_nonempty_sheet(xl)
     raw = xl.parse(sheet, header=None)
     raw = raw.dropna(axis=1, how="all").dropna(axis=0, how="all")
@@ -232,5 +241,5 @@ def intake_file(content: bytes, filename: str) -> IntakeResult:
     if lower.endswith(".csv"):
         return intake_csv(content)
     if lower.endswith((".xlsx", ".xls")):
-        return intake_excel(content)
+        return intake_excel(content, filename)
     raise ValueError(f"Unsupported file type: {filename}")

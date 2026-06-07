@@ -7,6 +7,8 @@ from app.database import get_db
 from app.deps import verify_admin_key
 from app.models import Organization
 from app.schemas.metrics import AdminMetricsOut
+from app.schemas.admin import JobFailuresResponse
+from app.services.admin_failures import list_job_failures
 from app.services.email import send_weekly_brief
 from app.services.metrics import compute_admin_metrics
 
@@ -19,6 +21,15 @@ def get_admin_metrics(
     _: None = Depends(verify_admin_key),
 ):
     return compute_admin_metrics(db)
+
+
+@router.get("/job-failures", response_model=JobFailuresResponse)
+def get_job_failures(
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_admin_key),
+    limit: int = 50,
+):
+    return list_job_failures(db, limit=limit)
 
 
 @router.post("/brief/test")

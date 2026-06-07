@@ -6,8 +6,9 @@ from app.deps import get_organization, verify_api_key
 from app.models import Organization
 from pydantic import BaseModel, Field
 
-from app.schemas import DataGapOut, DemoOrgResponse, OrgCoverageOut, OrgProgressOut, UploadJob
+from app.schemas import DataGapOut, DemoOrgResponse, JobErrorOut, OrgCoverageOut, OrgProgressOut, UploadJob
 from app.services.demo import create_demo_organization
+from app.services.job_errors import normalize_stored_error
 from app.services.org_coverage import build_org_coverage_payload
 from app.services.progress import get_org_progress
 
@@ -20,10 +21,14 @@ def _job_to_schema(job) -> UploadJob:
         status=job.status,  # type: ignore
         file_name=job.file_name,
         sector=job.sector,
-        errors=job.errors or [],
+        errors=[
+            JobErrorOut(**normalize_stored_error(err))
+            for err in (job.errors or [])
+        ],
         report_id=job.report_id,
         created_at=job.created_at.isoformat() if job.created_at else None,
         updated_at=job.updated_at.isoformat() if job.updated_at else None,
+        intake_metadata=job.intake_metadata if job.status == "error" else None,
     )
 
 

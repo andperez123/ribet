@@ -17,18 +17,26 @@ UploadStatus = Literal["pending", "processing", "done", "error", "needs_review"]
 Severity = Literal["low", "medium", "high", "critical"]
 
 
+class JobErrorOut(BaseModel):
+    code: str
+    message: str
+    hint: str | None = None
+    detail: str | None = None
+
+
 class UploadJob(BaseModel):
     id: UUID
     status: UploadStatus
     file_name: str
     sector: str | None = None
-    errors: list[str] = Field(default_factory=list)
+    errors: list[JobErrorOut] = Field(default_factory=list)
     report_id: UUID | None = None
     mapping_status: str | None = None
     mapping_confidence: float | None = None
     duplicate_of_job_id: UUID | None = None
     created_at: str | None = None
     updated_at: str | None = None
+    intake_metadata: dict | None = None
 
 
 class SectorStatus(BaseModel):

@@ -19,8 +19,9 @@ export type UploadFileMeta = {
   mimeType: string;
   sector?: UploadSector;
   status: UploadStatus;
-  error?: string;
+  error?: import("@/lib/upload/job-errors").JobError;
   reportId?: string;
+  intakeMetadata?: import("@/lib/upload/job-errors").IntakeMetadata | null;
 };
 
 export interface UploadClient {
@@ -37,13 +38,22 @@ export type UploadJob = {
   status: UploadStatus | "pending";
   file_name: string;
   sector?: string | null;
-  errors?: string[];
+  errors?: Array<
+    | string
+    | {
+        code: string;
+        message: string;
+        hint?: string | null;
+        detail?: string | null;
+      }
+  >;
   report_id?: string | null;
   mapping_status?: string | null;
   mapping_confidence?: number | null;
   duplicate_of_job_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  intake_metadata?: import("@/lib/upload/job-errors").IntakeMetadata | null;
 };
 
 export type UploadJobsResponse = {

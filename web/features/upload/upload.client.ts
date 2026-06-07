@@ -1,4 +1,5 @@
 import { BFF } from "@/lib/api/endpoints";
+import { firstJobError } from "@/lib/upload/job-errors";
 import type {
   UploadClient,
   UploadFileMeta,
@@ -81,8 +82,9 @@ export class ApiUploadClient implements UploadClient {
       mimeType: "application/octet-stream",
       sector: (job.sector as UploadSector | undefined) ?? sector,
       status: normalizeJobStatus(job.status),
-      error: job.errors?.[0],
+      error: firstJobError(job.errors) ?? undefined,
       reportId: job.report_id ?? undefined,
+      intakeMetadata: job.intake_metadata ?? undefined,
     }));
   }
 

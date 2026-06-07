@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import type { UploadFileMeta } from "@/lib/types/upload";
+import { firstJobError } from "@/lib/upload/job-errors";
 import { ApiUploadClient, createUploadClient } from "./upload.client";
 import { useUploadMode } from "./useUploadMode";
 
@@ -34,7 +35,8 @@ export function useJobPolling(
             status:
               job.status === "pending" ? "processing" : job.status,
             reportId: job.report_id ?? undefined,
-            error: job.errors?.[0],
+            error: firstJobError(job.errors) ?? undefined,
+            intakeMetadata: job.intake_metadata ?? undefined,
           };
         } catch {
           return null;
@@ -51,6 +53,7 @@ export function useJobPolling(
           status: u.status,
           reportId: u.reportId ?? f.reportId,
           error: u.error,
+          intakeMetadata: u.intakeMetadata ?? f.intakeMetadata,
         };
       })
     );
