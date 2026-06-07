@@ -27,7 +27,14 @@ export default function RootLayout({
   );
 
   if (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
-    return <ClerkProvider>{body}</ClerkProvider>;
+    return (
+      <ClerkProvider
+        signInUrl={process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || "/sign-in"}
+        signUpUrl={process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL || "/sign-up"}
+      >
+        {body}
+      </ClerkProvider>
+    );
   }
   return body;
 }

@@ -51,6 +51,16 @@ const clerkEnabled = Boolean(
   process.env.CLERK_SECRET_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 );
 
+const clerkMiddlewareOptions = {
+  // Keep sign-in on ribetlab.com — not accounts.ribetlab.com (breaks Next.js RSC fetch).
+  signInUrl: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL || "/sign-in",
+  signUpUrl: process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL || "/sign-up",
+  authorizedParties: [
+    "https://ribetlab.com",
+    "https://www.ribetlab.com",
+  ],
+};
+
 export default clerkEnabled
   ? clerkMiddleware(async (auth, request) => {
       const admin = adminGuard(request);
@@ -62,7 +72,7 @@ export default clerkEnabled
       if (isProtectedRoute(request)) {
         await auth.protect();
       }
-    })
+    }, clerkMiddlewareOptions)
   : function middleware(request: NextRequest) {
       const admin = adminGuard(request);
       return admin ?? NextResponse.next();

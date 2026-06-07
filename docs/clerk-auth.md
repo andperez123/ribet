@@ -42,7 +42,13 @@ Railway → **web** → **Variables**:
 
 - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
 - `CLERK_SECRET_KEY`
-- `CLERK_WEBHOOK_SECRET` (from the webhook you created)
+- `NEXT_PUBLIC_CLERK_SIGN_IN_URL` = `/sign-in` (keeps sign-in on ribetlab.com, not `accounts.ribetlab.com`)
+- `NEXT_PUBLIC_CLERK_SIGN_UP_URL` = `/sign-up`
+- `CLERK_WEBHOOK_SECRET` (optional — from the webhook you created)
+
+### DNS (Cloudflare)
+
+Clerk subdomains (`clerk`, `accounts`, `clkname`) must be **DNS only** (grey cloud), not proxied. Proxied orange-cloud records break Clerk verification and sign-in.
 
 Redeploy the web service.
 
