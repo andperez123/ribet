@@ -10,6 +10,7 @@ from app.deps import get_organization, verify_api_key
 from app.models import OperationalFinding, OperationalReport, Organization
 from app.schemas import FindingOut, OperationalReportOut, ReportSummary, ReportsListResponse
 from app.services.pdf_export import render_report_pdf
+from app.services.report import delete_report
 from app.services.report_insights import hydrate_report_insights, serialize_insights_for_api
 
 router = APIRouter(prefix="/v1", tags=["reports"])
@@ -120,6 +121,18 @@ def get_report(
     if not report or report.org_id != org.id:
         raise HTTPException(status_code=404, detail="Report not found")
     return _report_to_out(db, report)
+
+
+@router.delete("/reports/{report_id}")
+def remove_report(
+    report_id: UUID,
+    org: Organization = Depends(get_organization),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_api_key),
+):
+    if not delete_report(db, org.id, report_id):
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {"deleted": True, "id": str(report_id)}
 
 
 @router.get("/findings", response_model=list[FindingOut])

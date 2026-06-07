@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { DeleteReportButton } from "@/features/dashboard/DeleteReportButton";
 import { TryDemoButton } from "@/features/demo/TryDemoButton";
 import { formatDate, healthStatusColor } from "@/lib/dashboard/utils";
 import { serverData } from "@/lib/api/server-data";
@@ -88,6 +88,7 @@ export default async function ReportsIndexPage() {
                         >
                           PDF
                         </a>
+                        <DeleteReportButton reportId={r.id} />
                       </div>
                     </td>
                   </tr>

@@ -9,6 +9,7 @@ import { HealthScoreHero } from "@/features/dashboard/HealthScoreHero";
 import { InsightCardsGrid } from "@/features/dashboard/InsightCardsGrid";
 import { ReportAnalysisDebugPanel } from "@/features/dashboard/ReportAnalysisDebugPanel";
 import { ReportFindingsList } from "@/features/dashboard/ReportFindingsList";
+import { DeleteReportButton } from "@/features/dashboard/DeleteReportButton";
 import { ReportSections } from "@/features/dashboard/ReportSections";
 import { TopEntitiesPanel } from "@/features/dashboard/TopEntitiesPanel";
 import { WeeklyBriefPanel } from "@/features/dashboard/WeeklyBriefPanel";
@@ -108,6 +109,17 @@ export default async function ReportPage({ params }: Props) {
           <span className={healthStatusColor(report.health_status)}>
             {report.health_status}
           </span>
+          <a
+            href={`/api/reports/${report.id}/pdf`}
+            className="font-medium text-ribet-green hover:underline"
+            download
+          >
+            Download PDF
+          </a>
+          <DeleteReportButton
+            reportId={report.id}
+            redirectTo="/dashboard/reports"
+          />
         </div>
       </div>
 

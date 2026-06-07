@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthControls } from "@/components/layout/AuthControls";
 import { DemoBanner } from "@/components/layout/DemoBanner";
 import { Logo } from "@/components/ui/Logo";
 
@@ -27,12 +28,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
           </nav>
-          <Link
-            href="/"
-            className="text-sm font-medium text-ribet-muted hover:text-ribet-text"
-          >
-            Back to site
-          </Link>
+          <div className="flex items-center gap-4">
+            <AuthControls />
+            <Link
+              href="/"
+              className="text-sm font-medium text-ribet-muted hover:text-ribet-text"
+            >
+              Back to site
+            </Link>
+          </div>
         </div>
       </header>
 

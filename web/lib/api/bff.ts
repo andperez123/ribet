@@ -29,6 +29,12 @@ export function getFastApiBase(): string {
   return FASTAPI_URL.replace(/\/$/, "");
 }
 
+const PERSONAL_ORG_PREFIX = "user_";
+
+function personalClerkOrgId(clerkUserId: string): string {
+  return `${PERSONAL_ORG_PREFIX}${clerkUserId}`;
+}
+
 async function lookupOrCreateLocalOrg(
   clerkOrgId: string,
   name: string
@@ -59,7 +65,7 @@ export async function resolveOrgId(explicitOrgId?: string): Promise<string> {
 
   if (CLERK_ENABLED) {
     try {
-      const { orgId, orgSlug } = await auth();
+      const { orgId, orgSlug, userId } = await auth();
       if (orgId) {
         try {
           return await lookupOrCreateLocalOrg(orgId, orgSlug || "Organization");
@@ -68,6 +74,21 @@ export async function resolveOrgId(explicitOrgId?: string): Promise<string> {
           if (production) {
             throw new OrgResolutionError(
               "Could not provision your organization. Try again or contact support."
+            );
+          }
+        }
+      }
+      if (userId) {
+        try {
+          return await lookupOrCreateLocalOrg(
+            personalClerkOrgId(userId),
+            "My workspace"
+          );
+        } catch (err) {
+          console.error("[bff] personal workspace provisioning failed:", err);
+          if (production) {
+            throw new OrgResolutionError(
+              "Could not provision your workspace. Try again or contact support."
             );
           }
         }

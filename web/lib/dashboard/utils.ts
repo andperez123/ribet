@@ -57,7 +57,9 @@ export const BRIEF_SECTION_LABELS: Record<string, string> = {
   summary: "Summary",
 };
 
-export const COVERAGE_DOMAIN_LABELS: Record<keyof import("@/lib/types/report").DataCoverage, string> = {
+type CoverageDomainKey = "ar" | "ap" | "gl" | "inventory";
+
+export const COVERAGE_DOMAIN_LABELS: Record<CoverageDomainKey, string> = {
   ar: "Accounts receivable",
   ap: "Accounts payable",
   gl: "General ledger",

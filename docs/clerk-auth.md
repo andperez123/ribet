@@ -4,6 +4,8 @@ This repo supports optional authentication via Clerk for `/dashboard` routes.
 
 When Clerk is enabled, the Next.js middleware protects `/dashboard(.*)` and redirects users to sign-in (see `web/middleware.ts`).
 
+Each signed-in user gets a **personal workspace** (mapped to a local org via `user_<clerkUserId>`). If the user selects a Clerk organization, that org is used instead. Reports, uploads, and dashboard data are scoped to the active workspace — users only see and manage their own data unless they share a team org.
+
 ### 1) Create a Clerk application
 
 - Create a new app in Clerk.

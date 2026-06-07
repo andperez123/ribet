@@ -336,3 +336,35 @@ def generate_report(
     )
     db.commit()
     return report
+
+
+def delete_report(db: Session, org_id: UUID, report_id: UUID) -> bool:
+    """Delete a report and its dependent rows. Returns False if not found."""
+    from sqlalchemy import delete, update
+
+    from app.models import (
+        HealthSnapshot,
+        IngestJob,
+        OperationalFinding,
+        ProductEvent,
+        SeriesSnapshot,
+    )
+
+    report = db.get(OperationalReport, report_id)
+    if not report or report.org_id != org_id:
+        return False
+
+    db.execute(
+        delete(OperationalFinding).where(OperationalFinding.report_id == report_id)
+    )
+    db.execute(delete(HealthSnapshot).where(HealthSnapshot.report_id == report_id))
+    db.execute(delete(ProductEvent).where(ProductEvent.report_id == report_id))
+    db.execute(delete(SeriesSnapshot).where(SeriesSnapshot.report_id == report_id))
+    db.execute(
+        update(IngestJob)
+        .where(IngestJob.report_id == report_id)
+        .values(report_id=None)
+    )
+    db.delete(report)
+    db.commit()
+    return True
