@@ -127,6 +127,7 @@ class FindingOut(BaseModel):
     suggested_action: str | None = None
     narrative: str | None = None
     recommendation: str | None = None
+    gap_recommendation: str | None = None
     detected_at: str
 
     model_config = {"from_attributes": True}
@@ -175,6 +176,7 @@ class OperationalReportOut(BaseModel):
     management_questions: list[str] = Field(default_factory=list)
     period_label: str | None = None
     improvement_notes: list[dict] = Field(default_factory=list)
+    report_contract: dict | None = None
 
     model_config = {"from_attributes": True}
 

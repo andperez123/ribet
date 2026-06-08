@@ -14,58 +14,54 @@ export function AnalystNarrativePanel({
 }) {
   const narration = metadata?.narration ?? "legacy";
   const questions = managementQuestions ?? [];
+  const whatMatters = executiveSummary.slice(0, 5);
 
   return (
-    <Card>
-      <h3 className="text-sm font-semibold text-ribet-text">Analysis</h3>
-      {narration === "completed" && analystSummary ? (
-        <p className="mt-3 text-sm leading-relaxed text-ribet-text">
-          {analystSummary}
-        </p>
-      ) : narration === "failed" ? (
-        <p className="mt-3 text-sm text-ribet-muted">
-          AI analysis could not be generated for this report. Review the
-          deterministic insights below.
-        </p>
-      ) : narration === "skipped" ? (
-        <p className="mt-3 text-sm text-ribet-muted">
-          Deterministic analysis only — AI narration is not enabled for this
-          environment.
-        </p>
-      ) : (
-        <p className="mt-3 text-sm text-ribet-muted">
-          Deterministic analysis from uploaded data
-          {metadata?.data_domains_present?.length
-            ? ` (${metadata.data_domains_present.join(", ")})`
-            : ""}
-          .
-        </p>
-      )}
-
-      {executiveSummary.length > 0 && (
-        <div className="mt-4 border-t border-ribet-border/60 pt-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-ribet-muted">
-            Executive summary
-          </p>
-          <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-ribet-muted">
-            {executiveSummary.map((line, i) => (
+    <Card className="space-y-6">
+      {whatMatters.length > 0 && (
+        <section>
+          <h3 className="text-sm font-semibold text-ribet-text">What matters</h3>
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ribet-text">
+            {whatMatters.map((line, i) => (
               <li key={i}>{line}</li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
 
-      {questions.length > 0 && (
-        <div className="mt-4 border-t border-ribet-border/60 pt-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-ribet-muted">
-            Questions for management
+      <section className={whatMatters.length > 0 ? "border-t border-ribet-border/60 pt-6" : ""}>
+        <h3 className="text-sm font-semibold text-ribet-text">Analyst narrative</h3>
+        {narration === "completed" && analystSummary ? (
+          <p className="mt-3 text-sm leading-relaxed text-ribet-text">
+            {analystSummary}
           </p>
-          <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-ribet-text">
+        ) : narration === "failed" ? (
+          <p className="mt-3 text-sm text-ribet-muted">
+            AI analysis could not be generated for this report. The items above
+            are from deterministic analysis of your uploaded data.
+          </p>
+        ) : (
+          <p className="mt-3 text-sm text-ribet-muted">
+            Deterministic analysis from uploaded data
+            {metadata?.data_domains_present?.length
+              ? ` (${metadata.data_domains_present.join(", ")})`
+              : ""}
+            . Enable AI narration for a controller-facing narrative summary.
+          </p>
+        )}
+      </section>
+
+      {questions.length > 0 && (
+        <section className="border-t border-ribet-border/60 pt-6">
+          <h3 className="text-sm font-semibold text-ribet-text">
+            Questions for management
+          </h3>
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ribet-text">
             {questions.map((q, i) => (
               <li key={i}>{q}</li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
     </Card>
   );

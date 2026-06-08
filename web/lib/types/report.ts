@@ -46,6 +46,83 @@ export type DomainInsight = {
   metric_label?: string | null;
   metric_value?: string | null;
   finding_type?: string | null;
+  source_label?: string | null;
+};
+
+export type TopSignal = {
+  kind: "finding" | "insight" | "executive";
+  title: string;
+  body: string;
+  severity: string;
+  metric_label?: string;
+  metric_value?: string;
+  suggested_action?: string;
+  source?: string;
+};
+
+export type ActionItem = {
+  title: string;
+  detail?: string;
+  severity: string;
+  suggested_action?: string;
+  gap_recommendation?: string;
+  finding_type?: string;
+};
+
+export type SourceTraceability = {
+  upload_label: string;
+  period: string;
+  row_count: number;
+  job_id?: string | null;
+  report_type?: string | null;
+};
+
+export type ReportUnlock = {
+  type: string;
+  message: string;
+};
+
+export type ConfidenceScore = {
+  before: number;
+  after: number;
+  delta: number;
+};
+
+export type CoverageDelta = {
+  upload_label: string;
+  message: string;
+};
+
+export type PrimaryAnalysis = {
+  triggered_by: string[];
+  digest?: DataDigest;
+  domain_insights?: DomainInsight[];
+  source_traceability?: SourceTraceability;
+};
+
+export type OrgWideSynthesis = {
+  org_context_domains: string[];
+  digest?: DataDigest;
+  synthesis_insights?: DomainInsight[];
+  cross_domain_findings?: ReportFinding[];
+};
+
+export type ReportContract = {
+  top_signals?: TopSignal[];
+  action_items?: ActionItem[];
+  digest_kpis?: DataDigest;
+  domain_insights?: DomainInsight[];
+  primary_analysis?: PrimaryAnalysis;
+  org_wide_synthesis?: OrgWideSynthesis | null;
+  coverage_gaps?: Array<{
+    gap_type: string;
+    reason: string;
+    recommended_uploads?: string[];
+  }>;
+  unlocks_from_this_upload?: ReportUnlock[];
+  source_traceability?: SourceTraceability;
+  confidence_score?: ConfidenceScore;
+  coverage_delta?: CoverageDelta | null;
 };
 
 export type DataCoverage = {
@@ -104,6 +181,7 @@ export type OperationalReport = {
   management_questions?: string[];
   period_label?: string | null;
   improvement_notes?: ImprovementNote[];
+  report_contract?: ReportContract;
 };
 
 export type ImprovementNote = {
@@ -126,6 +204,7 @@ export type Finding = {
   suggested_action: string | null;
   narrative?: string | null;
   recommendation?: string | null;
+  gap_recommendation?: string | null;
   detected_at: string;
 };
 

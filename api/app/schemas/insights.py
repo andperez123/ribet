@@ -52,6 +52,7 @@ class DomainInsightOut(BaseModel):
     metric_label: str | None = None
     metric_value: str | None = None
     finding_type: str | None = None
+    source_label: str | None = None
 
 
 class DataCoverageOut(BaseModel):

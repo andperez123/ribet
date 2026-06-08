@@ -3,17 +3,28 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { AnalystNarrativePanel } from "@/features/dashboard/AnalystNarrativePanel";
+import { CoverageDeltaBanner } from "@/features/dashboard/CoverageDeltaBanner";
 import { DataCoverageBanner } from "@/features/dashboard/DataCoverageBanner";
-import { DataDigestKpiGrid } from "@/features/dashboard/DataDigestKpiGrid";
-import { HealthScoreHero } from "@/features/dashboard/HealthScoreHero";
-import { InsightCardsGrid } from "@/features/dashboard/InsightCardsGrid";
+import { DeleteReportButton } from "@/features/dashboard/DeleteReportButton";
+import {
+  OrgWideSynthesisPanel,
+  PrimaryAnalysisPanel,
+} from "@/features/dashboard/ReportAnalysisSections";
+import { ReportActionItems } from "@/features/dashboard/ReportActionItems";
 import { ReportAnalysisDebugPanel } from "@/features/dashboard/ReportAnalysisDebugPanel";
 import { ReportFindingsList } from "@/features/dashboard/ReportFindingsList";
-import { DeleteReportButton } from "@/features/dashboard/DeleteReportButton";
 import { ReportSections } from "@/features/dashboard/ReportSections";
 import { TopEntitiesPanel } from "@/features/dashboard/TopEntitiesPanel";
+import { TopSignalsHero } from "@/features/dashboard/TopSignalsHero";
+import { UnlocksFromUploadPanel } from "@/features/dashboard/UnlocksFromUploadPanel";
 import { WeeklyBriefPanel } from "@/features/dashboard/WeeklyBriefPanel";
+import { HealthScoreHero } from "@/features/dashboard/HealthScoreHero";
 import { serverData } from "@/lib/api/server-data";
+import {
+  buildTopSignals,
+  getActionItems,
+  sortDomainInsights,
+} from "@/lib/dashboard/report-signals";
 import { digestHasData, formatDate, healthStatusColor } from "@/lib/dashboard/utils";
 import type {
   AnalysisMetadata,
@@ -68,6 +79,10 @@ const EMPTY_METADATA: AnalysisMetadata = {
   data_domains_present: [],
 };
 
+const showDebugPanel =
+  process.env.RIBET_DEBUG === "true" ||
+  process.env.NODE_ENV === "development";
+
 export default async function ReportPage({ params }: Props) {
   const { id } = await params;
   const [report, brief, healthScore, findings] = await Promise.all([
@@ -79,11 +94,16 @@ export default async function ReportPage({ params }: Props) {
 
   if (!report) notFound();
 
-  const digest = { ...EMPTY_DIGEST, ...(report.data_digest ?? {}) };
+  const contract = report.report_contract;
+  const digest = { ...EMPTY_DIGEST, ...(contract?.digest_kpis ?? report.data_digest ?? {}) };
   const coverage = { ...EMPTY_COVERAGE, ...(report.data_coverage ?? {}) };
-  const insights: DomainInsight[] = report.domain_insights ?? [];
+  const insights: DomainInsight[] = sortDomainInsights(
+    contract?.domain_insights ?? report.domain_insights ?? []
+  );
   const metadata = report.analysis_metadata ?? EMPTY_METADATA;
   const hasData = digestHasData(digest);
+  const topSignals = buildTopSignals(report, findings ?? []);
+  const actionItems = getActionItems(report, findings ?? []);
 
   if (hasData && insights.length === 0) {
     console.error(
@@ -127,6 +147,13 @@ export default async function ReportPage({ params }: Props) {
 
       <DataCoverageBanner coverage={coverage} digest={digest} />
 
+      {(contract?.coverage_delta || contract?.confidence_score) && (
+        <CoverageDeltaBanner
+          coverageDelta={contract?.coverage_delta}
+          confidenceScore={contract?.confidence_score}
+        />
+      )}
+
       {!hasData && (
         <Card className="border-dashed">
           <p className="text-sm text-ribet-muted">
@@ -144,7 +171,19 @@ export default async function ReportPage({ params }: Props) {
 
       {hasData && (
         <>
-          <DataDigestKpiGrid digest={digest} coverage={coverage} />
+          <TopSignalsHero signals={topSignals} />
+          <ReportActionItems actionItems={actionItems} findings={findings ?? []} />
+
+          <PrimaryAnalysisPanel
+            primary={contract?.primary_analysis}
+            digest={digest}
+            coverage={coverage}
+            insights={insights}
+          />
+
+          <UnlocksFromUploadPanel unlocks={contract?.unlocks_from_this_upload} />
+
+          <OrgWideSynthesisPanel synthesis={contract?.org_wide_synthesis} />
 
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
@@ -157,8 +196,6 @@ export default async function ReportPage({ params }: Props) {
             </div>
             <div>{brief && <WeeklyBriefPanel brief={brief} />}</div>
           </div>
-
-          <InsightCardsGrid insights={insights} />
 
           {(report.improvement_notes?.length ?? 0) > 0 && (
             <Card>
@@ -179,12 +216,14 @@ export default async function ReportPage({ params }: Props) {
 
       <ReportFindingsList findings={findings ?? []} />
 
-      <ReportAnalysisDebugPanel
-        digest={digest}
-        coverage={coverage}
-        metadata={metadata}
-        orgId={report.org_id}
-      />
+      {showDebugPanel && (
+        <ReportAnalysisDebugPanel
+          digest={digest}
+          coverage={coverage}
+          metadata={metadata}
+          orgId={report.org_id}
+        />
+      )}
 
       <ReportSections report={report} />
     </div>

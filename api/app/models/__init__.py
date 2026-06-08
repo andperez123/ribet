@@ -183,6 +183,7 @@ class OperationalReport(Base):
     management_questions: Mapped[Optional[list]] = mapped_column(JsonColumn, nullable=True)
     period_label: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     improvement_notes: Mapped[Optional[list]] = mapped_column(JsonColumn, nullable=True)
+    report_contract: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

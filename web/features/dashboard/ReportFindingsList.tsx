@@ -38,6 +38,11 @@ export function ReportFindingsList({ findings }: { findings: Finding[] }) {
                 → {f.recommendation || f.suggested_action}
               </p>
             )}
+            {f.gap_recommendation && (
+              <p className="mt-2 rounded-lg border border-ribet-green/30 bg-ribet-green/5 px-3 py-2 text-xs text-ribet-text">
+                {f.gap_recommendation}
+              </p>
+            )}
             <p className="mt-2 text-xs text-ribet-muted">
               {f.department} · {f.category}
             </p>

@@ -39,6 +39,7 @@ def _report_to_out(db: Session, r: OperationalReport) -> OperationalReportOut:
         management_questions=r.management_questions or [],
         period_label=r.period_label,
         improvement_notes=r.improvement_notes or [],
+        report_contract=r.report_contract,
     )
 
 
@@ -147,6 +148,17 @@ def list_findings(
     if report_id is not None:
         q = q.filter(OperationalFinding.report_id == report_id)
     rows = q.order_by(OperationalFinding.detected_at.desc()).limit(limit).all()
+
+    gap_by_type: dict[str, str] = {}
+    if report_id is not None:
+        report = db.get(OperationalReport, report_id)
+        if report and report.report_contract:
+            for item in report.report_contract.get("action_items") or []:
+                ft = item.get("finding_type")
+                gap = item.get("gap_recommendation")
+                if ft and gap:
+                    gap_by_type[ft] = gap
+
     return [
         FindingOut(
             id=f.id,
@@ -161,6 +173,7 @@ def list_findings(
             suggested_action=f.suggested_action,
             narrative=f.narrative,
             recommendation=f.recommendation,
+            gap_recommendation=gap_by_type.get(f.finding_type),
             detected_at=f.detected_at.isoformat() if f.detected_at else "",
         )
         for f in rows

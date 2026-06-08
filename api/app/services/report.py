@@ -18,6 +18,7 @@ from app.services.events import emit_event
 from app.services.health import build_trend_snapshot, compute_health, get_prior_snapshot
 from app.services.memory import upsert_memory
 from app.services.narrator import narrate_findings_batch
+from app.services.report_contract import build_report_contract, get_covered_domains
 from app.services.report_insights import validate_insights_invariant
 from app.services.rules.cross_sector import run_cross_sector_rules
 from app.services.rules.runner import RuleFinding, run_rules, run_snapshot_delta_rules
@@ -112,7 +113,8 @@ def generate_report(
     job_id = job_ids[0] if job_ids else None
     period_label = period or datetime.now(timezone.utc).strftime("%Y-%m")
     trigger_job = db.get(IngestJob, job_id) if job_id else None
-    report_domains = domains_for_report_type(trigger_job.report_type if trigger_job else None)
+    trigger_domains = domains_for_report_type(trigger_job.report_type if trigger_job else None)
+    covered_domains = get_covered_domains(db, org_id)
     primary_domain = None
     if trigger_job and trigger_job.report_type:
         primary_domain = {
@@ -128,7 +130,7 @@ def generate_report(
             org_id,
             period=period_label,
             source_job_ids=job_ids or None,
-            domains=report_domains,
+            domains=trigger_domains,
         )
 
     org = db.get(Organization, org_id)
@@ -149,8 +151,9 @@ def generate_report(
 
     with track_stage(db, "rules_delta", org_id=org_id, job_id=job_id):
         findings.extend(run_snapshot_delta_rules(db, org_id))
+    cross_domain_findings = run_cross_sector_rules(db, org_id, op_snap, findings)
     with track_stage(db, "rules_cross_sector", org_id=org_id, job_id=job_id):
-        findings.extend(run_cross_sector_rules(db, org_id, op_snap, findings))
+        findings.extend(cross_domain_findings)
     upsert_memory(db, org_id, findings)
 
     health_snap = compute_health(db, org_id, findings, report.id)
@@ -161,17 +164,31 @@ def generate_report(
     trends = build_trend_snapshot(health_snap, prior_health, findings)
     trends = list(trends) + snapshot_delta_strings(op_snap, prior_op)
 
-    digest = build_data_digest(
+    primary_digest = build_data_digest(
         db,
         org_id,
         period=period_label,
         source_job_ids=job_ids or None,
-        domains=report_domains,
+        domains=trigger_domains,
     )
-    coverage = build_data_coverage(digest, primary_domain=primary_domain)
-    domain_insights = [i.to_dict() for i in build_domain_insights(digest, findings)]
+    org_digest = None
+    org_insights_raw: list = []
+    if covered_domains and (
+        not trigger_domains or covered_domains != trigger_domains
+    ):
+        org_digest = build_data_digest(
+            db,
+            org_id,
+            period=period_label,
+            domains=covered_domains,
+        )
+        org_insights_raw = build_domain_insights(org_digest, findings)
 
-    validate_insights_invariant(digest.to_dict(), domain_insights)
+    coverage = build_data_coverage(primary_digest, primary_domain=primary_domain)
+    domain_insights_objs = build_domain_insights(primary_digest, findings)
+    domain_insights = [i.to_dict() for i in domain_insights_objs]
+
+    validate_insights_invariant(primary_digest.to_dict(), domain_insights)
 
     if settings.ribet_narration.lower() == "on" and settings.openai_api_key:
         emit_event(
@@ -183,7 +200,7 @@ def generate_report(
         )
         db.commit()
 
-    narration = narrate_findings_batch(findings, org_name, op_snap, prior_op, digest=digest)
+    narration = narrate_findings_batch(findings, org_name, op_snap, prior_op, digest=primary_digest)
     narr_meta = {
         "duration_ms": narration.duration_ms,
         "model_name": narration.model_name,
@@ -249,7 +266,7 @@ def generate_report(
     if narratives.get("__executive__"):
         analyst_summary = narratives["__executive__"].get("narrative") or None
 
-    executive = build_executive_summary(digest, findings)
+    executive = build_executive_summary(primary_digest, findings)
     management_questions = list(narration.management_questions)
 
     severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
@@ -269,7 +286,7 @@ def generate_report(
     report.trend_snapshot = trends
     report.health_score = health_snap.score
     report.health_status = health_snap.status
-    report.data_digest = digest.to_dict()
+    report.data_digest = primary_digest.to_dict()
     report.domain_insights = domain_insights
     report.data_coverage = coverage
     report.analysis_metadata = _analysis_metadata_from_narration(
@@ -277,6 +294,25 @@ def generate_report(
     )
     report.analyst_summary = analyst_summary
     report.management_questions = management_questions
+
+    report.report_contract = build_report_contract(
+        db,
+        org_id,
+        report.id,
+        trigger_job,
+        job_ids,
+        period_label,
+        trigger_domains,
+        primary_digest,
+        domain_insights_objs,
+        findings,
+        executive,
+        covered_domains,
+        org_digest,
+        org_insights_raw,
+        cross_domain_findings,
+    )
+    report.domain_insights = report.report_contract.get("domain_insights", domain_insights)
 
     if job_ids:
         with track_stage(
@@ -297,9 +333,9 @@ def generate_report(
             )
             prior_snap = get_prior_series_snapshot(db, series.id)
             kpi_summary = {
-                "ar_total": digest.ar_total,
-                "ar_over_90_pct": digest.ar_over_90_pct,
-                "ap_total": digest.ap_total,
+                "ar_total": primary_digest.ar_total,
+                "ar_over_90_pct": primary_digest.ar_over_90_pct,
+                "ap_total": primary_digest.ap_total,
                 "health_score": health_snap.score,
                 "health_status": health_snap.status,
                 "vendor_concentration": op_snap.vendor_concentration,

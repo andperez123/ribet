@@ -275,6 +275,16 @@ class DomainInsight:
         return asdict(self)
 
 
+_INSIGHT_SEVERITY_RANK = {"alert": 0, "watch": 1, "info": 2}
+
+
+def sort_domain_insights(insights: list[dict]) -> list[dict]:
+    return sorted(
+        insights,
+        key=lambda i: _INSIGHT_SEVERITY_RANK.get(i.get("severity", "info"), 9),
+    )
+
+
 _FINDING_DOMAIN: dict[str, str] = {
     "ar_aging_spike": "ar",
     "customer_concentration": "ar",
@@ -291,6 +301,8 @@ _FINDING_DOMAIN: dict[str, str] = {
     "zero_or_dead_stock": "inventory",
     "missing_gl_mappings": "gl",
     "operational_cash_pressure": "risk",
+    "ar_ap_working_capital": "risk",
+    "gl_inventory_writeoff_pattern": "operational",
 }
 
 

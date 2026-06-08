@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from dataclasses import dataclass, field
 
 from app.config import settings
+from app.services.narrator_validation import digest_passes_validation, validate_narration_numbers
 from app.services.rules.runner import RuleFinding
 from app.services.transforms.snapshot import OperationalSnapshot
 
@@ -71,6 +72,10 @@ def narrate_findings_batch(
     so the LLM acts as the analyst rather than only rewording rule output.
     """
     if settings.ribet_narration.lower() != "on" or not settings.openai_api_key:
+        return NarrationResult(skipped=True)
+
+    if not digest_passes_validation(digest):
+        logger.info("narration_skipped reason=digest_validation_failed")
         return NarrationResult(skipped=True)
 
     digest_has_content = digest is not None and (
@@ -201,15 +206,50 @@ def narrate_findings_batch(
         if isinstance(q, str) and q.strip()
     ]
 
+    validated_out: dict[str, dict[str, str]] = {}
+    for fp, content in out.items():
+        text_parts = [content.get("narrative", ""), content.get("recommendation", "")]
+        combined = " ".join(text_parts)
+        valid, unsupported = validate_narration_numbers(combined, digest, findings)
+        if valid:
+            validated_out[fp] = content
+        else:
+            logger.warning(
+                "narration_validation_failed fingerprint=%s unsupported=%s",
+                fp,
+                unsupported,
+            )
+
+    if exec_summary and "__executive__" not in validated_out:
+        valid_exec, unsupported_exec = validate_narration_numbers(
+            exec_summary if isinstance(exec_summary, str) else "",
+            digest,
+            findings,
+        )
+        if not valid_exec:
+            logger.warning(
+                "narration_executive_validation_failed unsupported=%s",
+                unsupported_exec,
+            )
+
+    if not validated_out and not questions:
+        return NarrationResult(
+            failed=True,
+            duration_ms=duration_ms,
+            model_name=model,
+            token_usage=usage,
+            error_type="ValidationError",
+        )
+
     logger.info(
         "narration_ok duration_ms=%s model=%s tokens=%s findings=%s",
         duration_ms,
         model,
         usage,
-        len(out),
+        len(validated_out),
     )
     return NarrationResult(
-        narratives=out,
+        narratives=validated_out,
         management_questions=questions,
         duration_ms=duration_ms,
         model_name=model,
