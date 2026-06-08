@@ -74,7 +74,7 @@ def narrate_findings_batch(
     if settings.ribet_narration.lower() != "on" or not settings.openai_api_key:
         return NarrationResult(skipped=True)
 
-    if not digest_passes_validation(digest):
+    if digest is not None and not digest_passes_validation(digest):
         logger.info("narration_skipped reason=digest_validation_failed")
         return NarrationResult(skipped=True)
 
@@ -208,9 +208,9 @@ def narrate_findings_batch(
 
     validated_out: dict[str, dict[str, str]] = {}
     for fp, content in out.items():
-        text_parts = [content.get("narrative", ""), content.get("recommendation", "")]
-        combined = " ".join(text_parts)
-        valid, unsupported = validate_narration_numbers(combined, digest, findings)
+        # Validate narrative prose only; recommendations may use action counts (e.g. "top 5").
+        narrative_text = content.get("narrative", "")
+        valid, unsupported = validate_narration_numbers(narrative_text, digest, findings)
         if valid:
             validated_out[fp] = content
         else:
