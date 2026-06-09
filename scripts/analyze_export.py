@@ -49,6 +49,7 @@ from app.services.etl.detector import detect_report_type  # noqa: E402
 from app.services.transforms.adapters.generic import dataframe_to_canonical  # noqa: E402
 from app.services.transforms.persist import persist_canonical  # noqa: E402
 from app.services.digest import build_data_digest, build_executive_summary  # noqa: E402
+from app.services.analysis_context import AnalysisContext  # noqa: E402
 from app.services.rules import runner  # noqa: E402
 
 LEGACY_RULES = [
@@ -88,10 +89,16 @@ def _collect_files(args: list[str]) -> list[Path]:
 
 
 def _run_rule_subset(db, org_id, names: list[str]):
+    ctx = AnalysisContext(
+        org_id=org_id,
+        period="period-test",
+        source_job_ids=None,
+        domains=set(),
+    )
     findings = []
     for n in names:
         fn = getattr(runner, n)
-        findings.extend(fn(db, org_id))
+        findings.extend(fn(db, ctx))
     return findings
 
 

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { AnalystNarrativePanel } from "@/features/dashboard/AnalystNarrativePanel";
+import { TopRisksPanel } from "@/features/dashboard/TopRisksPanel";
 import { CoverageDeltaBanner } from "@/features/dashboard/CoverageDeltaBanner";
 import { DataCoverageBanner } from "@/features/dashboard/DataCoverageBanner";
 import { DeleteReportButton } from "@/features/dashboard/DeleteReportButton";
@@ -19,6 +20,8 @@ import { TopSignalsHero } from "@/features/dashboard/TopSignalsHero";
 import { UnlocksFromUploadPanel } from "@/features/dashboard/UnlocksFromUploadPanel";
 import { WeeklyBriefPanel } from "@/features/dashboard/WeeklyBriefPanel";
 import { HealthScoreHero } from "@/features/dashboard/HealthScoreHero";
+import { HealthComponentsGrid } from "@/features/dashboard/HealthComponentsGrid";
+import { ConditionalInsightsPanel } from "@/features/dashboard/ConditionalInsightsPanel";
 import { serverData } from "@/lib/api/server-data";
 import {
   buildTopSignals,
@@ -28,6 +31,7 @@ import {
 import { digestHasData, formatDate, healthStatusColor } from "@/lib/dashboard/utils";
 import type {
   AnalysisMetadata,
+  AnalystOutput,
   DataCoverage,
   DataDigest,
   DomainInsight,
@@ -101,6 +105,7 @@ export default async function ReportPage({ params }: Props) {
     contract?.domain_insights ?? report.domain_insights ?? []
   );
   const metadata = report.analysis_metadata ?? EMPTY_METADATA;
+  const analystOutput = (report.analyst_output ?? null) as AnalystOutput | null;
   const hasData = digestHasData(digest);
   const topSignals = buildTopSignals(report, findings ?? []);
   const actionItems = getActionItems(report, findings ?? []);
@@ -144,6 +149,9 @@ export default async function ReportPage({ params }: Props) {
       </div>
 
       {healthScore && <HealthScoreHero score={healthScore} />}
+      {healthScore && hasData && (
+        <HealthComponentsGrid score={healthScore} analystOutput={analystOutput} />
+      )}
 
       <DataCoverageBanner coverage={coverage} digest={digest} />
 
@@ -172,6 +180,7 @@ export default async function ReportPage({ params }: Props) {
       {hasData && (
         <>
           <TopSignalsHero signals={topSignals} />
+          <TopRisksPanel analystOutput={analystOutput} />
           <ReportActionItems actionItems={actionItems} findings={findings ?? []} />
 
           <PrimaryAnalysisPanel
@@ -185,6 +194,8 @@ export default async function ReportPage({ params }: Props) {
 
           <OrgWideSynthesisPanel synthesis={contract?.org_wide_synthesis} />
 
+          <ConditionalInsightsPanel analystOutput={analystOutput} />
+
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2">
               <AnalystNarrativePanel
@@ -192,6 +203,7 @@ export default async function ReportPage({ params }: Props) {
                 managementQuestions={report.management_questions}
                 metadata={metadata}
                 executiveSummary={report.executive_summary}
+                analystOutput={analystOutput}
               />
             </div>
             <div>{brief && <WeeklyBriefPanel brief={brief} />}</div>

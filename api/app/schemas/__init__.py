@@ -117,6 +117,8 @@ class DemoOrgResponse(BaseModel):
 class FindingOut(BaseModel):
     id: UUID
     finding_type: str
+    finding_id: str | None = None
+    finding_instance_id: str | None = None
     title: str
     detail: str
     severity: str
@@ -177,6 +179,8 @@ class OperationalReportOut(BaseModel):
     period_label: str | None = None
     improvement_notes: list[dict] = Field(default_factory=list)
     report_contract: dict | None = None
+    evidence_pack: dict | None = None
+    analyst_output: dict | None = None
 
     model_config = {"from_attributes": True}
 

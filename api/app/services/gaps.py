@@ -144,6 +144,14 @@ def _is_satisfied(spec: GapSpec, coverage: GraphCoverage) -> bool:
     return False
 
 
+def gap_specs_for_report(
+    coverage: GraphCoverage,
+    findings: list[RuleFinding],
+) -> list[GapSpec]:
+    """Public wrapper for evidence pack and contract builders."""
+    return _gap_specs(coverage, findings)
+
+
 def sync_data_gaps(
     db: Session,
     org_id: UUID,

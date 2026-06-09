@@ -2,37 +2,32 @@ from __future__ import annotations
 
 """Cross-sector deterministic rules."""
 
-from uuid import UUID
-
 from sqlalchemy.orm import Session
 
-from app.models import OperationalSnapshot
-from app.services.graph.coverage import get_graph_coverage
-from app.services.rules.runner import RuleFinding
+from app.services.analysis_context import AnalysisContext
+from app.services.rules.finding_registry import enrich_findings
+from app.services.rules.types import RuleFinding
 
 
-def run_cross_sector_rules(
-    db: Session,
-    org_id: UUID,
-    op_snap: OperationalSnapshot | None,
-    existing_findings: list[RuleFinding],
-) -> list[RuleFinding]:
-    if op_snap is None:
+def run_cross_sector_rules(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    if ctx.op_snap is None or ctx.coverage is None:
         return []
 
-    coverage = get_graph_coverage(db, org_id)
     findings: list[RuleFinding] = []
-    findings.extend(_ar_inventory_cash_pressure(coverage, op_snap, existing_findings))
-    findings.extend(_ar_ap_working_capital(coverage, op_snap, existing_findings))
-    findings.extend(_gl_inventory_writeoff(coverage, op_snap, existing_findings))
-    return findings
+    findings.extend(_ar_inventory_cash_pressure(ctx, ctx.findings))
+    findings.extend(_ar_ap_working_capital(ctx, ctx.findings))
+    findings.extend(_gl_inventory_writeoff(ctx, ctx.findings))
+    return enrich_findings(findings, ctx.period, ctx.org_id)
 
 
 def _ar_inventory_cash_pressure(
-    coverage,
-    op_snap: OperationalSnapshot,
+    ctx: AnalysisContext,
     existing_findings: list[RuleFinding],
 ) -> list[RuleFinding]:
+    coverage = ctx.coverage
+    op_snap = ctx.op_snap
+    assert coverage is not None and op_snap is not None
+
     if not coverage.has("ar_aging") or not coverage.has("inventory"):
         return []
 
@@ -75,15 +70,22 @@ def _ar_inventory_cash_pressure(
                 "Upload AP Aging, Open Sales Orders, and Purchase Orders "
                 "to determine whether cash is trapped in operations."
             ),
+            evidence={
+                "ar_over_90_pct": op_snap.ar_over_90_pct,
+                "inventory_value": op_snap.inventory_value,
+            },
         )
     ]
 
 
 def _ar_ap_working_capital(
-    coverage,
-    op_snap: OperationalSnapshot,
+    ctx: AnalysisContext,
     existing_findings: list[RuleFinding],
 ) -> list[RuleFinding]:
+    coverage = ctx.coverage
+    op_snap = ctx.op_snap
+    assert coverage is not None and op_snap is not None
+
     if not coverage.has("ar_aging") or not coverage.has("ap_aging"):
         return []
 
@@ -120,20 +122,23 @@ def _ar_ap_working_capital(
                 "Compare DSO vs DPO trends and prioritize collections on aged AR "
                 "while reviewing concentrated vendor payables."
             ),
+            evidence={"ar_over_90_pct": ar_pct, "vendor_concentration_pct": vendor_conc},
         )
     ]
 
 
 def _gl_inventory_writeoff(
-    coverage,
-    op_snap: OperationalSnapshot,
+    ctx: AnalysisContext,
     existing_findings: list[RuleFinding],
 ) -> list[RuleFinding]:
+    coverage = ctx.coverage
+    assert coverage is not None
+
     if not coverage.has("gl_detail") or not coverage.has("inventory"):
         return []
 
     has_gl_signal = any(
-        f.finding_type in ("missing_gl_mappings", "gl_adjustment_spike")
+        f.finding_type in ("missing_gl_mappings", "inventory_adjustment_spike")
         for f in existing_findings
     )
     has_inv_signal = any(
@@ -163,5 +168,6 @@ def _gl_inventory_writeoff(
                 "Reconcile GL adjustment accounts against recent inventory adjustments "
                 "and verify SKU costing."
             ),
+            evidence={"gl_and_inventory_signals": True},
         )
     ]

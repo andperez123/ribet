@@ -16,15 +16,23 @@ from app.services.digest import (
 )
 from app.services.events import emit_event
 from app.services.health import build_trend_snapshot, compute_health, get_prior_snapshot
-from app.services.memory import upsert_memory
-from app.services.narrator import narrate_findings_batch
+from app.services.ai_analyst.runner import (
+    AnalystResult,
+    persist_report_narrative,
+    run_ai_analyst,
+)
+from app.services.evidence_pack import build_evidence_pack, persist_evidence_pack
 from app.services.report_contract import build_report_contract, get_covered_domains
 from app.services.report_insights import validate_insights_invariant
+from app.services.analysis_context import AnalysisContext
+from app.services.graph.coverage import get_graph_coverage
 from app.services.rules.cross_sector import run_cross_sector_rules
-from app.services.rules.runner import RuleFinding, run_rules, run_snapshot_delta_rules
+from app.services.rules.runner import run_rules, run_snapshot_delta_rules
+from app.services.rules.types import RuleFinding
 from app.services.telemetry import track_stage
 from app.services.improvements import build_improvement_notes
 from app.services.series import append_series_snapshot, get_or_create_series, get_prior_series_snapshot
+from app.services.memory import upsert_memory
 from app.services.transforms.snapshot import (
     build_operational_snapshot,
     get_prior_snapshot as get_prior_op_snapshot,
@@ -57,6 +65,8 @@ def persist_findings(
                 department=f.department,
                 category=f.category,
                 fingerprint=f.fingerprint,
+                finding_id=f.finding_id or None,
+                finding_instance_id=f.finding_instance_id or None,
                 suggested_action=extra.get("recommendation") or f.suggested_action,
                 narrative=extra.get("narrative"),
                 recommendation=extra.get("recommendation"),
@@ -81,27 +91,64 @@ def _merge_narratives_into_dicts(
     return merged
 
 
-def _analysis_metadata_from_narration(
-    narration,
+def _analysis_metadata_from_analyst(
+    result: AnalystResult,
     finding_count: int,
     coverage: dict[str, bool],
 ) -> dict:
     domains = [k for k, v in coverage.items() if v and k in ("ar", "ap", "gl", "inventory")]
-    if narration.skipped:
+    if result.skipped:
         status = "skipped"
-    elif narration.failed:
-        status = "failed"
-    else:
+    elif result.used_fallback:
+        status = "fallback"
+    elif result.output:
         status = "completed"
-    narrated = len([k for k in narration.narratives if k != "__executive__"])
-    return {
+    else:
+        status = "failed"
+    meta = {
         "narration": status,
-        "model": narration.model_name,
+        "model": result.model_name,
         "finding_count": finding_count,
-        "narrated_count": narrated,
+        "narrated_count": len(result.output.top_risks) if result.output else 0,
         "data_domains_present": domains,
-        "duration_ms": narration.duration_ms or None,
+        "duration_ms": result.duration_ms or None,
+        "ai_analyst": True,
+        "verification_status": result.verification_status,
+        "used_fallback": result.used_fallback,
     }
+    if result.output:
+        meta["executive_bullets"] = len(result.output.executive_summary)
+        meta["top_risks_count"] = len(result.output.top_risks)
+    return meta
+
+
+def _narratives_from_analyst_output(result: AnalystResult, findings: list[RuleFinding]) -> dict[str, dict[str, str]]:
+    narratives: dict[str, dict[str, str]] = {}
+    if not result.output:
+        return narratives
+
+    id_to_finding = {f.finding_id: f for f in findings if f.finding_id}
+    for risk in result.output.top_risks:
+        for fid in risk.finding_ids:
+            finding = id_to_finding.get(fid)
+            if finding:
+                narratives[finding.fingerprint] = {
+                    "narrative": risk.narrative,
+                    "recommendation": risk.recommended_action,
+                }
+
+    if result.output.executive_summary:
+        narratives["__executive__"] = {
+            "narrative": " ".join(result.output.executive_summary),
+            "recommendation": "",
+        }
+    return narratives
+
+
+def _management_questions_from_analyst(result: AnalystResult) -> list[str]:
+    if not result.output:
+        return []
+    return [q.question for q in result.output.management_questions if q.question.strip()]
 
 
 def generate_report(
@@ -125,6 +172,13 @@ def generate_report(
         }.get(trigger_job.report_type)
 
     with track_stage(db, "rules", org_id=org_id, job_id=job_id):
+        ctx = AnalysisContext(
+            org_id=org_id,
+            period=period_label,
+            source_job_ids=job_ids or None,
+            domains=trigger_domains or set(),
+        )
+        ctx.prior_op_snap = get_prior_op_snapshot(db, org_id, exclude_period=period_label)
         findings = run_rules(
             db,
             org_id,
@@ -139,7 +193,7 @@ def generate_report(
     report = OperationalReport(org_id=org_id, job_ids=[str(j) for j in job_ids], period_label=period_label)
     db.add(report)
     db.flush()
-    prior_op = get_prior_op_snapshot(db, org_id, exclude_period=period_label)
+
     op_snap = build_operational_snapshot(
         db,
         org_id,
@@ -148,18 +202,27 @@ def generate_report(
         100,
         "Stable",
     )
+    ctx.op_snap = op_snap
+    ctx.coverage = get_graph_coverage(db, org_id)
+    ctx.findings = findings
 
-    with track_stage(db, "rules_delta", org_id=org_id, job_id=job_id):
-        findings.extend(run_snapshot_delta_rules(db, org_id))
-    cross_domain_findings = run_cross_sector_rules(db, org_id, op_snap, findings)
     with track_stage(db, "rules_cross_sector", org_id=org_id, job_id=job_id):
+        cross_domain_findings = run_cross_sector_rules(db, ctx)
         findings.extend(cross_domain_findings)
-    upsert_memory(db, org_id, findings)
+        ctx.findings = findings
 
     health_snap = compute_health(db, org_id, findings, report.id)
     op_snap.health_score = health_snap.score
     op_snap.health_status = health_snap.status
+    db.flush()
 
+    ctx.op_snap = op_snap
+    with track_stage(db, "rules_delta", org_id=org_id, job_id=job_id):
+        findings.extend(run_snapshot_delta_rules(db, ctx))
+
+    upsert_memory(db, org_id, findings)
+
+    prior_op = ctx.prior_op_snap
     prior_health = get_prior_snapshot(db, org_id, exclude_id=health_snap.id)
     trends = build_trend_snapshot(health_snap, prior_health, findings)
     trends = list(trends) + snapshot_delta_strings(op_snap, prior_op)
@@ -190,85 +253,7 @@ def generate_report(
 
     validate_insights_invariant(primary_digest.to_dict(), domain_insights)
 
-    if settings.ribet_narration.lower() == "on" and settings.openai_api_key:
-        emit_event(
-            db,
-            "narration_started",
-            org_id=org_id,
-            job_id=job_id,
-            metadata={"finding_count": len(findings)},
-        )
-        db.commit()
-
-    narration = narrate_findings_batch(findings, org_name, op_snap, prior_op, digest=primary_digest)
-    narr_meta = {
-        "duration_ms": narration.duration_ms,
-        "model_name": narration.model_name,
-        "token_usage": narration.token_usage,
-        "finding_count": len(findings),
-        "narrated_count": len(narration.narratives),
-        "skipped": narration.skipped,
-    }
-    if narration.failed:
-        emit_event(
-            db,
-            "narration_failed",
-            org_id=org_id,
-            job_id=job_id,
-            metadata={**narr_meta, "error_type": narration.error_type},
-        )
-        db.commit()
-    elif not narration.skipped:
-        emit_event(
-            db,
-            "narration_completed",
-            org_id=org_id,
-            job_id=job_id,
-            metadata=narr_meta,
-        )
-        db.commit()
-    narratives = narration.narratives
-
-    financial = _merge_narratives_into_dicts(
-        [f.to_dict() for f in findings if f.category == "financial"],
-        narratives,
-    )
-    operational = _merge_narratives_into_dicts(
-        [f.to_dict() for f in findings if f.category == "operational"],
-        narratives,
-    )
-    risk = _merge_narratives_into_dicts(
-        [
-            f.to_dict()
-            for f in findings
-            if f.severity in ("high", "critical") or f.category == "risk"
-        ],
-        narratives,
-    )
-
-    recurring = (
-        db.query(OperationalMemory)
-        .filter(OperationalMemory.org_id == org_id, OperationalMemory.occurrence_count > 1)
-        .all()
-    )
-    for mem in recurring:
-        risk.append(
-            {
-                "title": mem.title,
-                "detail": f"Detected {mem.occurrence_count} times. Last seen {mem.last_seen_at.isoformat()}.",
-                "severity": mem.severity_peak,
-                "category": "risk",
-                "finding_type": mem.finding_type,
-            }
-        )
-
-    analyst_summary: str | None = None
-    if narratives.get("__executive__"):
-        analyst_summary = narratives["__executive__"].get("narrative") or None
-
     executive = build_executive_summary(primary_digest, findings)
-    management_questions = list(narration.management_questions)
-
     severity_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1}
     seen_actions: set[str] = set()
     actions: list[str] = []
@@ -277,6 +262,19 @@ def generate_report(
         if act and act not in seen_actions:
             seen_actions.add(act)
             actions.append(act)
+
+    analyst_result = AnalystResult(skipped=True)
+    narratives: dict[str, dict[str, str]] = {}
+    analyst_summary: str | None = None
+    management_questions: list[str] = []
+
+    financial = [f.to_dict() for f in findings if f.category == "financial"]
+    operational = [f.to_dict() for f in findings if f.category == "operational"]
+    risk = [
+        f.to_dict()
+        for f in findings
+        if f.severity in ("high", "critical") or f.category == "risk"
+    ]
 
     report.executive_summary = executive
     report.financial_findings = financial
@@ -289,11 +287,6 @@ def generate_report(
     report.data_digest = primary_digest.to_dict()
     report.domain_insights = domain_insights
     report.data_coverage = coverage
-    report.analysis_metadata = _analysis_metadata_from_narration(
-        narration, len(findings), coverage
-    )
-    report.analyst_summary = analyst_summary
-    report.management_questions = management_questions
 
     report.report_contract = build_report_contract(
         db,
@@ -324,6 +317,75 @@ def generate_report(
             extra={"finding_count": len(findings)},
         ):
             persist_findings(db, org_id, job_ids[0], report.id, findings, narratives)
+            db.flush()
+
+    with track_stage(db, "evidence_pack", org_id=org_id, job_id=job_id, report_id=report.id):
+        pack = build_evidence_pack(db, report.id, findings=findings)
+        persist_evidence_pack(db, report.id, pack)
+
+    if settings.ribet_narration.lower() == "on" and settings.openai_api_key:
+        emit_event(
+            db,
+            "ai_analyst_started",
+            org_id=org_id,
+            job_id=job_id,
+            report_id=report.id,
+            metadata={"finding_count": len(findings)},
+        )
+        db.commit()
+
+    with track_stage(db, "ai_analyst", org_id=org_id, job_id=job_id, report_id=report.id):
+        analyst_result = run_ai_analyst(pack)
+        persist_report_narrative(db, report.id, org_id, analyst_result)
+
+    if analyst_result.skipped:
+        pass
+    elif analyst_result.used_fallback or analyst_result.verification_status == "fallback":
+        emit_event(
+            db,
+            "ai_analyst_fallback",
+            org_id=org_id,
+            job_id=job_id,
+            report_id=report.id,
+            metadata={"failures": analyst_result.verification_failures},
+        )
+    elif analyst_result.output:
+        emit_event(
+            db,
+            "ai_analyst_completed",
+            org_id=org_id,
+            job_id=job_id,
+            report_id=report.id,
+            metadata={"duration_ms": analyst_result.duration_ms},
+        )
+
+    narratives = _narratives_from_analyst_output(analyst_result, findings)
+    management_questions = _management_questions_from_analyst(analyst_result)
+    if analyst_result.output and analyst_result.output.executive_summary:
+        analyst_summary = " ".join(analyst_result.output.executive_summary)
+
+    recurring = (
+        db.query(OperationalMemory)
+        .filter(OperationalMemory.org_id == org_id, OperationalMemory.occurrence_count > 1)
+        .all()
+    )
+    risk = _merge_narratives_into_dicts(risk, narratives)
+    for mem in recurring:
+        risk.append(
+            {
+                "title": mem.title,
+                "detail": f"Detected {mem.occurrence_count} times. Last seen {mem.last_seen_at.isoformat()}.",
+                "severity": mem.severity_peak,
+                "category": "risk",
+                "finding_type": mem.finding_type,
+            }
+        )
+    report.financial_findings = _merge_narratives_into_dicts(financial, narratives)
+    report.operational_findings = _merge_narratives_into_dicts(operational, narratives)
+    report.risk_areas = risk
+    report.analyst_summary = analyst_summary
+    report.management_questions = management_questions
+    report.analysis_metadata = _analysis_metadata_from_analyst(analyst_result, len(findings), coverage)
 
     if job_id:
         job = db.get(IngestJob, job_id)
@@ -365,8 +427,9 @@ def generate_report(
         metadata={
             "health_score": report.health_score,
             "finding_count": len(findings),
-            "narration_failed": narration.failed,
-            "narration_ms": narration.duration_ms,
+            "narration_failed": analyst_result.verification_status == "failed",
+            "ai_analyst_fallback": analyst_result.used_fallback,
+            "narration_ms": analyst_result.duration_ms,
             "data_domains": [k for k, v in coverage.items() if v],
         },
     )
@@ -379,10 +442,12 @@ def delete_report(db: Session, org_id: UUID, report_id: UUID) -> bool:
     from sqlalchemy import delete, update
 
     from app.models import (
+        EvidencePackRecord,
         HealthSnapshot,
         IngestJob,
         OperationalFinding,
         ProductEvent,
+        ReportNarrative,
         SeriesSnapshot,
     )
 
@@ -393,6 +458,8 @@ def delete_report(db: Session, org_id: UUID, report_id: UUID) -> bool:
     db.execute(
         delete(OperationalFinding).where(OperationalFinding.report_id == report_id)
     )
+    db.execute(delete(EvidencePackRecord).where(EvidencePackRecord.report_id == report_id))
+    db.execute(delete(ReportNarrative).where(ReportNarrative.report_id == report_id))
     db.execute(delete(HealthSnapshot).where(HealthSnapshot.report_id == report_id))
     db.execute(delete(ProductEvent).where(ProductEvent.report_id == report_id))
     db.execute(delete(SeriesSnapshot).where(SeriesSnapshot.report_id == report_id))

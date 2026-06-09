@@ -96,6 +96,8 @@ class OperationalFinding(Base):
     job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("ingest_jobs.id"))
     report_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("operational_reports.id"))
     finding_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    finding_id: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    finding_instance_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     detail: Mapped[str] = mapped_column(Text, nullable=False)
     severity: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -185,6 +187,42 @@ class OperationalReport(Base):
     improvement_notes: Mapped[Optional[list]] = mapped_column(JsonColumn, nullable=True)
     report_contract: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EvidencePackRecord(Base):
+    __tablename__ = "evidence_packs"
+    __table_args__ = (Index("ix_evidence_packs_report", "report_id", unique=True),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("operational_reports.id", ondelete="CASCADE"), nullable=False
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
+    period_label: Mapped[str] = mapped_column(String(16), nullable=False)
+    pack: Mapped[dict] = mapped_column(JsonColumn, nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(32), default="evidence_pack.v1")
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ReportNarrative(Base):
+    __tablename__ = "report_narratives"
+    __table_args__ = (Index("ix_report_narratives_report", "report_id", unique=True),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("operational_reports.id", ondelete="CASCADE"), nullable=False
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"), nullable=False)
+    output: Mapped[dict] = mapped_column(JsonColumn, nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(32), default="analyst_output.v1")
+    prompt_version: Mapped[str] = mapped_column(String(32), default="ai_analyst.v1")
+    verification_status: Mapped[str] = mapped_column(String(16), default="pending")
+    verification_failures: Mapped[Optional[list]] = mapped_column(JsonColumn, nullable=True)
+    model_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    token_usage: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
+    source: Mapped[str] = mapped_column(String(32), default="ai")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class DataSeries(Base):

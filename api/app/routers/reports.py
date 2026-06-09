@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,6 +13,8 @@ from app.schemas import FindingOut, OperationalReportOut, ReportSummary, Reports
 from app.services.pdf_export import render_report_pdf
 from app.services.report import delete_report
 from app.services.report_insights import hydrate_report_insights, serialize_insights_for_api
+from app.services.evidence_pack import get_evidence_pack_for_report
+from app.services.ai_analyst.runner import get_analyst_output_for_report
 
 router = APIRouter(prefix="/v1", tags=["reports"])
 
@@ -40,6 +43,8 @@ def _report_to_out(db: Session, r: OperationalReport) -> OperationalReportOut:
         period_label=r.period_label,
         improvement_notes=r.improvement_notes or [],
         report_contract=r.report_contract,
+        evidence_pack=get_evidence_pack_for_report(db, r.id),
+        analyst_output=get_analyst_output_for_report(db, r.id),
     )
 
 
@@ -142,7 +147,7 @@ def list_findings(
     db: Session = Depends(get_db),
     _: None = Depends(verify_api_key),
     limit: int = 50,
-    report_id: UUID | None = Query(default=None),
+    report_id: Optional[UUID] = Query(default=None),
 ):
     q = db.query(OperationalFinding).filter(OperationalFinding.org_id == org.id)
     if report_id is not None:
@@ -163,6 +168,8 @@ def list_findings(
         FindingOut(
             id=f.id,
             finding_type=f.finding_type,
+            finding_id=f.finding_id,
+            finding_instance_id=f.finding_instance_id,
             title=f.title,
             detail=f.detail,
             severity=f.severity,

@@ -288,13 +288,14 @@ def sort_domain_insights(insights: list[dict]) -> list[dict]:
 _FINDING_DOMAIN: dict[str, str] = {
     "ar_aging_spike": "ar",
     "customer_concentration": "ar",
-    "duplicate_customers": "ar",
+    "duplicate_customer_names": "ar",
+    "duplicate_customer_ids": "ar",
     "invalid_aging_buckets": "ar",
+    "ar_amount_unmapped": "ar",
     "ap_negative_balance": "ap",
     "vendor_concentration": "ap",
     "vendor_name_concentration": "ap",
     "inconsistent_vendor_naming": "ap",
-    "duplicate_vendors": "ap",
     "inventory_adjustment_spike": "inventory",
     "orphan_inventory": "inventory",
     "negative_inventory": "inventory",
@@ -580,7 +581,7 @@ def build_weekly_brief_sections(
         if digest.ap_negative_total < 0:
             items.append(f"${abs(digest.ap_negative_total):,.0f} in negative vendor balances.")
         for f in findings:
-            if f.finding_type in ("ap_negative_balance", "inconsistent_vendor_naming", "duplicate_vendors"):
+            if f.finding_type in ("ap_negative_balance", "inconsistent_vendor_naming"):
                 items.append(f.title)
         sections["ap_aging"] = items
 

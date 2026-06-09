@@ -1,24 +1,14 @@
 from __future__ import annotations
 
-import hashlib
-from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import Customer, GlTransaction, InventoryItem, Invoice, OperationalSnapshot, Vendor
-from app.services.transforms.snapshot import get_prior_snapshot
-
-
-@dataclass
-class RuleScope:
-    period: str | None = None
-    source_job_ids: list[UUID] | None = None
-    domains: set[str] | None = None
-
-    def includes(self, domain: str) -> bool:
-        return self.domains is None or domain in self.domains
+from app.models import Customer, GlTransaction, InventoryItem, Invoice, Vendor
+from app.services.analysis_context import AnalysisContext
+from app.services.rules.finding_registry import enrich_findings
+from app.services.rules.types import RuleFinding, RuleScope
 
 
 def _invoice_query(db: Session, org_id: UUID, scope: RuleScope | None = None):
@@ -61,38 +51,6 @@ def _inventory_query(db: Session, org_id: UUID, scope: RuleScope | None = None):
     return q
 
 
-@dataclass
-class RuleFinding:
-    finding_type: str
-    title: str
-    detail: str
-    severity: str
-    confidence: float
-    business_impact: str
-    department: str
-    category: str
-    suggested_action: str
-
-    @property
-    def fingerprint(self) -> str:
-        raw = f"{self.finding_type}:{self.title}"
-        return hashlib.sha256(raw.encode()).hexdigest()[:32]
-
-    def to_dict(self) -> dict:
-        return {
-            "finding_type": self.finding_type,
-            "title": self.title,
-            "detail": self.detail,
-            "severity": self.severity,
-            "confidence": self.confidence,
-            "business_impact": self.business_impact,
-            "department": self.department,
-            "category": self.category,
-            "suggested_action": self.suggested_action,
-            "fingerprint": self.fingerprint,
-        }
-
-
 def run_rules(
     db: Session,
     org_id: UUID,
@@ -101,48 +59,47 @@ def run_rules(
     source_job_ids: list[UUID] | None = None,
     domains: set[str] | None = None,
 ) -> list[RuleFinding]:
-    scope = RuleScope(period=period, source_job_ids=source_job_ids, domains=domains)
+    ctx = AnalysisContext(
+        org_id=org_id,
+        period=period or "",
+        source_job_ids=source_job_ids,
+        domains=domains or set(),
+    )
     findings: list[RuleFinding] = []
-    if scope.includes("ar"):
-        findings.extend(_check_ar_zero_amounts(db, org_id, scope))
-        findings.extend(_check_ar_aging_spike(db, org_id, scope))
-        findings.extend(_check_customer_concentration(db, org_id, scope))
-        findings.extend(_check_duplicate_customers(db, org_id, scope))
-        findings.extend(_check_invalid_aging_buckets(db, org_id, scope))
-    if scope.includes("ap"):
-        findings.extend(_check_ap_negative(db, org_id, scope))
-        findings.extend(_check_vendor_concentration(db, org_id, scope))
-        findings.extend(_check_vendor_name_concentration(db, org_id, scope))
-        findings.extend(_check_duplicate_vendors(db, org_id, scope))
-    if scope.includes("inventory"):
-        findings.extend(_check_inventory_adjustments(db, org_id, scope))
-        findings.extend(_check_orphan_inventory(db, org_id, scope))
-        findings.extend(_check_negative_inventory(db, org_id, scope))
-        findings.extend(_check_zero_or_dead_stock_signals(db, org_id, scope))
-    if scope.includes("gl"):
-        findings.extend(_check_missing_gl_mappings(db, org_id, scope))
-    return findings
+    if ctx.includes("ar"):
+        findings.extend(_check_ar_zero_amounts(db, ctx))
+        findings.extend(_check_ar_aging_spike(db, ctx))
+        findings.extend(_check_customer_concentration(db, ctx))
+        findings.extend(_check_duplicate_customers(db, ctx))
+        findings.extend(_check_invalid_aging_buckets(db, ctx))
+    if ctx.includes("ap"):
+        findings.extend(_check_ap_negative(db, ctx))
+        findings.extend(_check_vendor_concentration(db, ctx))
+        findings.extend(_check_vendor_name_concentration(db, ctx))
+        findings.extend(_check_duplicate_vendors(db, ctx))
+    if ctx.includes("inventory"):
+        findings.extend(_check_inventory_adjustments(db, ctx))
+        findings.extend(_check_orphan_inventory(db, ctx))
+        findings.extend(_check_negative_inventory(db, ctx))
+        findings.extend(_check_zero_or_dead_stock_signals(db, ctx))
+    if ctx.includes("gl"):
+        findings.extend(_check_missing_gl_mappings(db, ctx))
+    return enrich_findings(findings, ctx.period, ctx.org_id)
+
+
+def run_snapshot_delta_rules(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    findings = _check_snapshot_deltas(db, ctx)
+    return enrich_findings(findings, ctx.period, ctx.org_id)
 
 
 def _normalize_name(name: str | None) -> str:
     return " ".join((name or "").lower().split())
 
 
-def run_snapshot_delta_rules(db: Session, org_id: UUID) -> list[RuleFinding]:
-    return _check_snapshot_deltas(db, org_id)
-
-
-def _check_snapshot_deltas(db: Session, org_id: UUID) -> list[RuleFinding]:
-    current = (
-        db.query(OperationalSnapshot)
-        .filter(OperationalSnapshot.org_id == org_id)
-        .order_by(OperationalSnapshot.computed_at.desc())
-        .first()
-    )
-    if not current:
-        return []
-    prior = get_prior_snapshot(db, org_id, exclude_period=current.period)
-    if not prior:
+def _check_snapshot_deltas(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    current = ctx.op_snap
+    prior = ctx.prior_op_snap
+    if not current or not prior:
         return []
 
     results: list[RuleFinding] = []
@@ -165,9 +122,18 @@ def _check_snapshot_deltas(db: Session, org_id: UUID) -> list[RuleFinding]:
                 department="finance",
                 category="financial",
                 suggested_action="Review collection workflow and top overdue accounts.",
+                evidence={
+                    "prior_pct": prior.ar_over_90_pct,
+                    "current_pct": current.ar_over_90_pct,
+                    "delta_pct": current.ar_over_90_pct - prior.ar_over_90_pct,
+                },
             )
         )
-    if current.health_score and prior.health_score and prior.health_score - current.health_score >= 10:
+    if (
+        current.health_score
+        and prior.health_score
+        and prior.health_score - current.health_score >= 10
+    ):
         results.append(
             RuleFinding(
                 finding_type="health_score_declined",
@@ -179,6 +145,11 @@ def _check_snapshot_deltas(db: Session, org_id: UUID) -> list[RuleFinding]:
                 department="finance",
                 category="risk",
                 suggested_action="Review latest findings and address high-severity items.",
+                evidence={
+                    "prior_score": prior.health_score,
+                    "current_score": current.health_score,
+                    "delta": prior.health_score - current.health_score,
+                },
             )
         )
     if (
@@ -200,13 +171,18 @@ def _check_snapshot_deltas(db: Session, org_id: UUID) -> list[RuleFinding]:
                 department="purchasing",
                 category="risk",
                 suggested_action="Review vendor dependency and payment terms.",
+                evidence={
+                    "prior_pct": prior.vendor_concentration,
+                    "current_pct": current.vendor_concentration,
+                },
             )
         )
     return results
 
 
-def _check_ar_zero_amounts(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
-    base = _invoice_query(db, org_id, scope)
+def _check_ar_zero_amounts(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    scope = ctx.scope
+    base = _invoice_query(db, ctx.org_id, scope)
     row_count = base.with_entities(func.count(Invoice.id)).scalar() or 0
     total = base.with_entities(func.sum(Invoice.amount)).scalar() or 0
     if row_count <= 0 or float(total or 0) > 0:
@@ -227,12 +203,14 @@ def _check_ar_zero_amounts(db: Session, org_id: UUID, scope: RuleScope | None = 
             suggested_action=(
                 "Re-export with Amount, Balance, or Total columns, or use aging bucket columns."
             ),
+            evidence={"row_count": row_count, "total_ar": 0},
         )
     ]
 
 
-def _check_ar_aging_spike(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
-    base = _invoice_query(db, org_id, scope)
+def _check_ar_aging_spike(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    scope = ctx.scope
+    base = _invoice_query(db, ctx.org_id, scope)
     over_90 = (
         base.filter(Invoice.days_overdue >= 90).with_entities(func.sum(Invoice.amount)).scalar() or 0
     )
@@ -253,13 +231,19 @@ def _check_ar_aging_spike(db: Session, org_id: UUID, scope: RuleScope | None = N
             department="finance",
             category="financial",
             suggested_action="Review top overdue accounts and collection workflow.",
+            evidence={
+                "total_ar": float(total),
+                "ar_over_90": float(over_90),
+                "ar_over_90_pct": round(pct, 1),
+            },
         )
     ]
 
 
-def _check_customer_concentration(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
+def _check_customer_concentration(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    scope = ctx.scope
     rows = (
-        _invoice_query(db, org_id, scope)
+        _invoice_query(db, ctx.org_id, scope)
         .with_entities(Invoice.customer_id, func.sum(Invoice.amount))
         .group_by(Invoice.customer_id)
         .all()
@@ -276,7 +260,7 @@ def _check_customer_concentration(db: Session, org_id: UUID, scope: RuleScope | 
         return []
     name_row = (
         db.query(Customer.name)
-        .filter(Customer.org_id == org_id, Customer.customer_id == top_cid)
+        .filter(Customer.org_id == ctx.org_id, Customer.customer_id == top_cid)
         .first()
     )
     name = (name_row[0] if name_row else None) or top_cid
@@ -293,39 +277,51 @@ def _check_customer_concentration(db: Session, org_id: UUID, scope: RuleScope | 
             business_impact="cash_flow",
             department="finance",
             category="risk",
-            suggested_action=(
-                f"Assess credit exposure to {name} and diversify the customer base."
-            ),
+            suggested_action=f"Assess credit exposure to {name} and diversify the customer base.",
+            evidence={
+                "amount": top_amt,
+                "pct_of_ar": round(pct, 1),
+                "total_ar": grand_total,
+                "top_customer_name": name,
+            },
         )
     ]
 
 
-def _check_duplicate_customers(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
-    q = db.query(Customer.customer_id, func.count(Customer.id)).filter(Customer.org_id == org_id)
-    if scope and scope.source_job_ids:
-        q = q.filter(Customer.source_job_id.in_(scope.source_job_ids))
-    dupes = q.group_by(Customer.customer_id).having(func.count(Customer.id) > 1).all()
+def _check_duplicate_customers(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    """Same customer name with multiple distinct customer IDs."""
+    q = db.query(Customer).filter(Customer.org_id == ctx.org_id)
+    if ctx.source_job_ids:
+        q = q.filter(Customer.source_job_id.in_(ctx.source_job_ids))
+    by_name: dict[str, set[str]] = {}
+    for customer in q.all():
+        key = _normalize_name(customer.name)
+        if key:
+            by_name.setdefault(key, set()).add(customer.customer_id)
+    dupes = {name: ids for name, ids in by_name.items() if len(ids) > 1}
     if not dupes:
         return []
     return [
         RuleFinding(
-            finding_type="duplicate_customer_ids",
-            title="Duplicate customer IDs detected",
-            detail=f"Found {len(dupes)} customer ID(s) appearing more than once in exports.",
+            finding_type="duplicate_customer_names",
+            title="Duplicate customer names detected",
+            detail=f"Found {len(dupes)} customer name(s) mapped to multiple IDs in exports.",
             severity="medium",
             confidence=1.0,
             business_impact="compliance",
             department="finance",
             category="data_quality",
             suggested_action="Reconcile customer master data in your ERP.",
+            evidence={"duplicate_name_count": len(dupes)},
         )
     ]
 
 
-def _check_ap_negative(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
-    negatives = _vendor_query(db, org_id, scope).filter(Vendor.balance < 0).all()
+def _check_ap_negative(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    negatives = _vendor_query(db, ctx.org_id, ctx.scope).filter(Vendor.balance < 0).all()
     if not negatives:
         return []
+    neg_total = sum(v.balance or 0 for v in negatives)
     return [
         RuleFinding(
             finding_type="ap_negative_balance",
@@ -337,12 +333,13 @@ def _check_ap_negative(db: Session, org_id: UUID, scope: RuleScope | None = None
             department="finance",
             category="financial",
             suggested_action="Verify vendor credits and payment applications.",
+            evidence={"negative_vendor_count": len(negatives), "negative_total": neg_total},
         )
     ]
 
 
-def _check_vendor_concentration(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
-    vendors = _vendor_query(db, org_id, scope).filter(Vendor.balance > 0).all()
+def _check_vendor_concentration(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    vendors = _vendor_query(db, ctx.org_id, ctx.scope).filter(Vendor.balance > 0).all()
     if len(vendors) < 3:
         return []
     total = sum(v.balance or 0 for v in vendors)
@@ -363,13 +360,17 @@ def _check_vendor_concentration(db: Session, org_id: UUID, scope: RuleScope | No
             department="purchasing",
             category="risk",
             suggested_action="Diversify vendor base and review payment terms.",
+            evidence={
+                "top_vendor_pct": round(pct, 1),
+                "total_ap": total,
+                "top_vendor_name": top.name or top.vendor_id,
+            },
         )
     ]
 
 
-def _check_vendor_name_concentration(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
-    """Combine vendors sharing a normalized name (same supplier, multiple IDs)."""
-    vendors = _vendor_query(db, org_id, scope).filter(Vendor.balance > 0).all()
+def _check_vendor_name_concentration(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    vendors = _vendor_query(db, ctx.org_id, ctx.scope).filter(Vendor.balance > 0).all()
     if len(vendors) < 3:
         return []
     total = sum(v.balance or 0 for v in vendors)
@@ -387,8 +388,6 @@ def _check_vendor_name_concentration(db: Session, org_id: UUID, scope: RuleScope
         return []
     top = max(by_name.values(), key=lambda e: e["balance"])
     pct = (top["balance"] / total) * 100
-    # Only emit when combining IDs reveals concentration the single-row rule misses,
-    # i.e. the supplier spans multiple IDs and clears the threshold.
     if len(top["ids"]) < 2 or pct < 40:
         return []
     return [
@@ -408,13 +407,18 @@ def _check_vendor_name_concentration(db: Session, org_id: UUID, scope: RuleScope
             suggested_action=(
                 f"Merge duplicate records for {top['name']} and treat combined exposure as one vendor."
             ),
+            evidence={
+                "combined_pct": round(pct, 1),
+                "vendor_id_count": len(top["ids"]),
+                "combined_balance": top["balance"],
+            },
         )
     ]
 
 
-def _check_inventory_adjustments(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
+def _check_inventory_adjustments(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
     adj_keywords = ["adjustment", "adj", "write-off", "writeoff", "shrinkage"]
-    gl_rows = _gl_query(db, org_id, scope).all()
+    gl_rows = _gl_query(db, ctx.org_id, ctx.scope).all()
     adj_total = 0.0
     for row in gl_rows:
         name = (row.account_name or row.account_id or "").lower()
@@ -433,18 +437,20 @@ def _check_inventory_adjustments(db: Session, org_id: UUID, scope: RuleScope | N
             department="operations",
             category="operational",
             suggested_action="Require PO receiving validation before inventory adjustments.",
+            evidence={"adjustment_total": adj_total},
         )
     ]
 
 
-def _check_orphan_inventory(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
-    orphans = (
-        _inventory_query(db, org_id, scope)
-        .filter((InventoryItem.gl_account == None) | (InventoryItem.gl_account == ""))  # noqa: E711
-        .count()
-    )
+def _check_orphan_inventory(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    base = _inventory_query(db, ctx.org_id, ctx.scope)
+    orphans = base.filter(
+        (InventoryItem.gl_account == None) | (InventoryItem.gl_account == "")  # noqa: E711
+    ).count()
+    total = base.count()
     if orphans == 0:
         return []
+    orphan_pct = (orphans / total * 100) if total else 0
     return [
         RuleFinding(
             finding_type="orphan_inventory",
@@ -456,21 +462,26 @@ def _check_orphan_inventory(db: Session, org_id: UUID, scope: RuleScope | None =
             department="operations",
             category="data_quality",
             suggested_action="Map inventory items to GL accounts in your ERP.",
+            evidence={
+                "orphan_count": orphans,
+                "total_items": total,
+                "orphan_pct": round(orphan_pct, 1),
+            },
         )
     ]
 
 
-def _check_negative_inventory(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
-    items = _inventory_query(db, org_id, scope).filter(InventoryItem.quantity < 0).all()
+def _check_negative_inventory(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    items = _inventory_query(db, ctx.org_id, ctx.scope).filter(InventoryItem.quantity < 0).all()
     if not items:
         return []
-    skus = ", ".join(sorted({(i.sku or i.item_id) for i in items})[:5])
+    total = _inventory_query(db, ctx.org_id, ctx.scope).count()
     return [
         RuleFinding(
             finding_type="negative_inventory",
             title="Negative inventory quantities",
             detail=(
-                f"{len(items)} item(s) report negative on-hand quantity ({skus}). "
+                f"{len(items)} item(s) report negative on-hand quantity. "
                 "Negative stock indicates unrecorded receipts or over-issued material."
             ),
             severity="high",
@@ -479,20 +490,15 @@ def _check_negative_inventory(db: Session, org_id: UUID, scope: RuleScope | None
             department="operations",
             category="operational",
             suggested_action="Cycle-count affected SKUs and correct on-hand balances in the ERP.",
+            evidence={"negative_count": len(items), "total_items": total},
         )
     ]
 
 
-def _check_zero_or_dead_stock_signals(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
-    """Zero stock is only material when it is widespread.
-
-    Without demand / open-order data we cannot prove a stockout vs. an obsolete
-    SKU, so we only flag when a large share of the catalog sits at zero (a
-    data/operational signal worth review). Phase 3 will refine this using recent
-    demand and open sales/work orders.
-    """
-    zero = _inventory_query(db, org_id, scope).filter(InventoryItem.quantity == 0).count()
-    total = _inventory_query(db, org_id, scope).count()
+def _check_zero_or_dead_stock_signals(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    base = _inventory_query(db, ctx.org_id, ctx.scope)
+    zero = base.filter(InventoryItem.quantity == 0).count()
+    total = base.count()
     if total == 0:
         return []
     pct = (zero / total) * 100
@@ -512,16 +518,21 @@ def _check_zero_or_dead_stock_signals(db: Session, org_id: UUID, scope: RuleScop
             department="operations",
             category="operational",
             suggested_action="Cross-check zero-stock SKUs against recent demand and open orders.",
+            evidence={
+                "zero_stock_count": zero,
+                "total_items": total,
+                "zero_stock_pct": round(pct, 1),
+            },
         )
     ]
 
 
-def _check_missing_gl_mappings(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
-    missing = (
-        _gl_query(db, org_id, scope)
-        .filter((GlTransaction.account_id == None) | (GlTransaction.account_id == ""))  # noqa: E711
-        .count()
-    )
+def _check_missing_gl_mappings(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    base = _gl_query(db, ctx.org_id, ctx.scope)
+    missing = base.filter(
+        (GlTransaction.account_id == None) | (GlTransaction.account_id == "")  # noqa: E711
+    ).count()
+    txn_count = base.count()
     if missing == 0:
         return []
     return [
@@ -535,18 +546,24 @@ def _check_missing_gl_mappings(db: Session, org_id: UUID, scope: RuleScope | Non
             department="finance",
             category="data_quality",
             suggested_action="Complete GL mapping for all journal entries.",
+            evidence={"unmapped_count": missing, "transaction_count": txn_count},
         )
     ]
 
 
-def _check_invalid_aging_buckets(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
+def _check_invalid_aging_buckets(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
     valid = {"current", "1-30", "31-60", "61-90", "91-120", "90+", ">90", "over 90"}
     invalid = (
-        _invoice_query(db, org_id, scope)
+        _invoice_query(db, ctx.org_id, ctx.scope)
         .filter(Invoice.aging_bucket != None, Invoice.aging_bucket != "")  # noqa: E711
         .all()
     )
-    bad = [i for i in invalid if i.aging_bucket.lower() not in valid and not any(v in i.aging_bucket.lower() for v in ["90", "120"])]
+    bad = [
+        i
+        for i in invalid
+        if i.aging_bucket.lower() not in valid
+        and not any(v in i.aging_bucket.lower() for v in ["90", "120"])
+    ]
     if not bad:
         return []
     return [
@@ -560,12 +577,13 @@ def _check_invalid_aging_buckets(db: Session, org_id: UUID, scope: RuleScope | N
             department="finance",
             category="data_quality",
             suggested_action="Standardize aging bucket definitions in AR reports.",
+            evidence={"invalid_count": len(bad)},
         )
     ]
 
 
-def _check_duplicate_vendors(db: Session, org_id: UUID, scope: RuleScope | None = None) -> list[RuleFinding]:
-    vendors = _vendor_query(db, org_id, scope).all()
+def _check_duplicate_vendors(db: Session, ctx: AnalysisContext) -> list[RuleFinding]:
+    vendors = _vendor_query(db, ctx.org_id, ctx.scope).all()
     names: dict[str, list] = {}
     for v in vendors:
         key = (v.name or "").lower().strip()
@@ -585,5 +603,15 @@ def _check_duplicate_vendors(db: Session, org_id: UUID, scope: RuleScope | None 
             department="purchasing",
             category="data_quality",
             suggested_action="Merge duplicate vendor records in AP master.",
+            evidence={"duplicate_name_count": len(dupes)},
         )
     ]
+
+
+# Re-export for backward compatibility
+__all__ = [
+    "RuleFinding",
+    "RuleScope",
+    "run_rules",
+    "run_snapshot_delta_rules",
+]

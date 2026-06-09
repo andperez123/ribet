@@ -1,12 +1,30 @@
 import { COMPONENT_LABELS } from "@/lib/dashboard/utils";
-import type { HealthScore } from "@/lib/types/report";
+import type { AnalystOutput, HealthScore } from "@/lib/types/report";
 
-export function HealthComponentsGrid({ score }: { score: HealthScore }) {
+export function HealthComponentsGrid({
+  score,
+  analystOutput,
+}: {
+  score: HealthScore;
+  analystOutput?: AnalystOutput | null;
+}) {
+  const explanations = analystOutput?.dashboard_explanations;
   const entries = Object.entries(score.components || {}).filter(
     ([key]) => key !== "overall"
   );
 
   if (!entries.length) return null;
+
+  const explanationFor = (key: string) => {
+    if (!explanations) return null;
+    const map: Record<string, string | undefined> = {
+      ar_risk: explanations.ar_risk,
+      cash_flow: explanations.cash_flow,
+      inventory: explanations.inventory,
+      data_quality: explanations.data_quality,
+    };
+    return map[key];
+  };
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -25,6 +43,11 @@ export function HealthComponentsGrid({ score }: { score: HealthScore }) {
           >
             {value}
           </p>
+          {explanationFor(key) && (
+            <p className="mt-3 text-xs leading-relaxed text-ribet-muted">
+              {explanationFor(key)}
+            </p>
+          )}
         </div>
       ))}
     </div>

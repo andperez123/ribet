@@ -182,6 +182,50 @@ export type OperationalReport = {
   period_label?: string | null;
   improvement_notes?: ImprovementNote[];
   report_contract?: ReportContract;
+  evidence_pack?: Record<string, unknown> | null;
+  analyst_output?: AnalystOutput | null;
+};
+
+export type TopRisk = {
+  rank: number;
+  title: string;
+  impact: string;
+  finding_ids: string[];
+  metric_keys: string[];
+  narrative: string;
+  recommended_action: string;
+};
+
+export type ManagementQuestion = {
+  question: string;
+  context: string;
+  finding_ids?: string[];
+};
+
+export type AnalystOutput = {
+  schema_version: string;
+  executive_summary: string[];
+  top_risks: TopRisk[];
+  management_questions: ManagementQuestion[];
+  dashboard_explanations?: {
+    ar_risk?: string;
+    cash_flow?: string;
+    inventory?: string;
+    data_quality?: string;
+  };
+  confidence_notes?: string[];
+  recommended_uploads?: Array<{
+    upload: string;
+    priority: string;
+    rationale: string;
+    reason_code?: string;
+  }>;
+  conditional_insights?: Array<{
+    locked_capability: string;
+    requires_upload: string;
+    insight: string;
+  }>;
+  source?: string;
 };
 
 export type ImprovementNote = {
@@ -194,6 +238,8 @@ export type ImprovementNote = {
 export type Finding = {
   id: string;
   finding_type: string;
+  finding_id?: string | null;
+  finding_instance_id?: string | null;
   title: string;
   detail: string;
   severity: Severity;

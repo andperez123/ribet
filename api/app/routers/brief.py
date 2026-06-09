@@ -1,3 +1,4 @@
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -69,7 +70,7 @@ def weekly_brief(
     org: Organization = Depends(get_organization),
     db: Session = Depends(get_db),
     _: None = Depends(verify_api_key),
-    report_id: UUID | None = Query(default=None),
+    report_id: Optional[UUID] = Query(default=None),
 ):
     q = db.query(OperationalReport).filter(OperationalReport.org_id == org.id)
     if report_id is not None:
