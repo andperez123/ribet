@@ -24,6 +24,7 @@ function adminGuard(request: NextRequest): NextResponse | null {
   }
 
   const keyParam = request.nextUrl.searchParams.get("key");
+  const secure = process.env.NODE_ENV === "production";
   if (keyParam === secret) {
     const url = request.nextUrl.clone();
     url.searchParams.delete("key");
@@ -33,6 +34,7 @@ function adminGuard(request: NextRequest): NextResponse | null {
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
+      secure,
     });
     return response;
   }
@@ -42,7 +44,7 @@ function adminGuard(request: NextRequest): NextResponse | null {
     return NextResponse.next();
   }
 
-  return new NextResponse("Unauthorized — append ?key=YOUR_ADMIN_SECRET", {
+  return new NextResponse("Unauthorized", {
     status: 401,
   });
 }

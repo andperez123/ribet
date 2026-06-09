@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.deps import get_organization, verify_api_key
 from app.models import Organization
@@ -35,7 +36,9 @@ def _job_to_schema(job) -> UploadJob:
 
 @router.post("/demo", response_model=DemoOrgResponse)
 def create_demo(db: Session = Depends(get_db)):
-    """Public endpoint — creates ephemeral org and queues fixture uploads."""
+    """Creates ephemeral org and queues fixture uploads (local/dev only)."""
+    if settings.is_production:
+        raise HTTPException(status_code=403, detail="Demo org creation is disabled")
     org, jobs = create_demo_organization(db)
     return DemoOrgResponse(
         org_id=org.id,

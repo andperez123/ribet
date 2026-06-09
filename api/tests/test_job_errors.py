@@ -50,8 +50,20 @@ def test_normalize_structured_error():
             "message": "We couldn't read this Excel file.",
             "hint": "Try CSV.",
             "detail": "BadZipFile: not a zip",
-        }
+        },
+        include_detail=True,
     )
     assert out["code"] == "excel_read_failed"
     assert out["message"] == "We couldn't read this Excel file."
     assert out["detail"] == "BadZipFile: not a zip"
+
+
+def test_normalize_strips_detail_for_clients():
+    out = normalize_stored_error(
+        {
+            "code": "processing_failed",
+            "message": "Something went wrong.",
+            "detail": "Traceback (most recent call last): ...",
+        }
+    )
+    assert out["detail"] is None

@@ -12,7 +12,21 @@ from app.services.events import emit_event
 from app.services.sectors import validate_sector
 from app.services.storage import upload_file
 
-ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+ALLOWED_EXTENSIONS = {".csv", ".xlsx"}
+
+
+async def _read_upload_bounded(upload: UploadFile, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await upload.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise ValueError(f"File exceeds max size of {max_bytes} bytes")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def validate_file(filename: str, content: bytes, max_bytes: int) -> None:
@@ -35,7 +49,7 @@ async def create_upload_jobs(
     validated_sector = validate_sector(sector)
     jobs: list[IngestJob] = []
     for upload in files:
-        content = await upload.read()
+        content = await _read_upload_bounded(upload, max_bytes)
         filename = upload.filename or "unknown"
         validate_file(filename, content, max_bytes)
 

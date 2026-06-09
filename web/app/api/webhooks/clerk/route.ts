@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Webhook } from "svix";
-import { getFastApiBase } from "@/lib/api/bff";
+import { getBffApiKey, getFastApiBase } from "@/lib/api/bff";
 
 type ClerkOrgEvent = {
   type: string;
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   const res = await fetch(`${getFastApiBase()}/v1/org/from-clerk`, {
     method: "POST",
     headers: {
-      "X-API-Key": process.env.FASTAPI_API_KEY || "dev-secret",
+      "X-API-Key": getBffApiKey(),
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
-import { bffAuthErrorResponse } from "./bff-errors";
-import { getFastApiBase, getProxyHeaders } from "./bff";
+import { resolveProxyHeaders } from "./bff-errors";
+import { getFastApiBase } from "./bff";
+
+function isProxyAuthFailure(
+  headers: HeadersInit | NextResponse
+): headers is NextResponse {
+  return headers instanceof NextResponse;
+}
 
 export async function proxyDelete(path: string) {
   const url = `${getFastApiBase()}${path}`;
-  let headers: HeadersInit;
-  try {
-    headers = await getProxyHeaders();
-  } catch (err) {
-    const authResp = bffAuthErrorResponse(err);
-    if (authResp) return authResp;
-    throw err;
-  }
+  const headers = await resolveProxyHeaders();
+  if (isProxyAuthFailure(headers)) return headers;
   const res = await fetch(url, {
     method: "DELETE",
     headers,
@@ -27,14 +27,8 @@ export async function proxyDelete(path: string) {
 export async function proxyGet(path: string, search?: URLSearchParams) {
   const qs = search?.toString();
   const url = `${getFastApiBase()}${path}${qs ? `?${qs}` : ""}`;
-  let headers: HeadersInit;
-  try {
-    headers = await getProxyHeaders();
-  } catch (err) {
-    const authResp = bffAuthErrorResponse(err);
-    if (authResp) return authResp;
-    throw err;
-  }
+  const headers = await resolveProxyHeaders();
+  if (isProxyAuthFailure(headers)) return headers;
   const res = await fetch(url, {
     headers,
     cache: "no-store",

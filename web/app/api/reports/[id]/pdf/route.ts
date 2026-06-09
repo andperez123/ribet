@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFastApiBase, getProxyHeaders } from "@/lib/api/bff";
+import { getFastApiBase } from "@/lib/api/bff";
+import { resolveProxyHeaders } from "@/lib/api/bff-errors";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params;
+  const headers = await resolveProxyHeaders();
+  if (headers instanceof NextResponse) return headers;
+
   const res = await fetch(`${getFastApiBase()}/v1/reports/${id}/pdf`, {
-    headers: await getProxyHeaders(),
+    headers,
   });
 
   if (!res.ok) {

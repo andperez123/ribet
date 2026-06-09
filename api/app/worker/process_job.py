@@ -32,9 +32,32 @@ logging.basicConfig(
 logger = logging.getLogger("ribet.worker")
 
 POLL_INTERVAL = 2
+STUCK_JOB_MINUTES = 30
+
+
+def reclaim_stuck_jobs(db) -> int:
+    """Return processing jobs to pending if the worker died mid-run."""
+    from datetime import timedelta
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=STUCK_JOB_MINUTES)
+    stuck = (
+        db.query(IngestJob)
+        .filter(IngestJob.status == "processing", IngestJob.updated_at < cutoff)
+        .all()
+    )
+    if not stuck:
+        return 0
+    for job in stuck:
+        job.status = "pending"
+    db.commit()
+    return len(stuck)
 
 
 def claim_job(db) -> IngestJob | None:
+    reclaimed = reclaim_stuck_jobs(db)
+    if reclaimed:
+        logger.warning("reclaimed_stuck_jobs count=%s", reclaimed)
+
     row = db.execute(
         text(
             """

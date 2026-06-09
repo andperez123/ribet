@@ -3,7 +3,21 @@ import { getFastApiBase } from "@/lib/api/bff";
 
 const DEMO_COOKIE = "ribet-demo-org";
 
+function isProductionEnv(): boolean {
+  return (
+    process.env.NODE_ENV === "production" ||
+    process.env.RIBET_ENV === "production"
+  );
+}
+
 export async function POST() {
+  if (isProductionEnv()) {
+    return NextResponse.json(
+      { detail: "Demo org creation is disabled in production" },
+      { status: 403 }
+    );
+  }
+
   const res = await fetch(`${getFastApiBase()}/v1/org/demo`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -21,6 +35,7 @@ export async function POST() {
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24,
+    secure: process.env.NODE_ENV === "production",
   });
   return response;
 }

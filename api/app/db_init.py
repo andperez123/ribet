@@ -73,6 +73,8 @@ def _run_migrations() -> None:
         command.upgrade(cfg, "head")
         logger.info("alembic_upgrade_complete")
     except Exception as exc:
+        if settings.is_production:
+            raise
         logger.warning(
             "alembic_upgrade_failed fallback=create_all error=%s",
             exc,

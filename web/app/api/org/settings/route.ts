@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFastApiBase, getProxyHeaders } from "@/lib/api/bff";
+import { getFastApiBase } from "@/lib/api/bff";
+import { resolveProxyHeaders } from "@/lib/api/bff-errors";
 
 export async function GET() {
+  const headers = await resolveProxyHeaders();
+  if (headers instanceof NextResponse) return headers;
+
   const res = await fetch(`${getFastApiBase()}/v1/org/settings`, {
-    headers: await getProxyHeaders(),
+    headers,
     cache: "no-store",
   });
   const body = await res.text();
@@ -14,11 +18,14 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  const headers = await resolveProxyHeaders();
+  if (headers instanceof NextResponse) return headers;
+
   const body = await req.text();
   const res = await fetch(`${getFastApiBase()}/v1/org/settings`, {
     method: "PATCH",
     headers: {
-      ...(await getProxyHeaders()),
+      ...headers,
       "Content-Type": "application/json",
     },
     body,

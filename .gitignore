@@ -1,7 +1,12 @@
 # Dependencies
 node_modules/
 api/.venv/
+api/.venv-ci/
 .venv/
+.venv-ci/
+
+# Cursor agent artifacts
+.cursor/
 
 # Build / cache
 web/.next/

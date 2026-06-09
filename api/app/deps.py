@@ -1,24 +1,36 @@
 from __future__ import annotations
 
+import secrets
 import uuid
 
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
-from app.config import settings
+from app.config import DEV_API_KEY, settings
 from app.database import get_db
 from app.models import Organization
 
 
+def _configured_api_key() -> str:
+    key = (settings.api_key or "").strip()
+    if not key:
+        raise HTTPException(status_code=503, detail="API key not configured")
+    if settings.is_production and key == DEV_API_KEY:
+        raise HTTPException(status_code=503, detail="API key not configured")
+    return key
+
+
 def verify_api_key(x_api_key: str | None = Header(None, alias="X-API-Key")):
-    if settings.api_key and x_api_key != settings.api_key:
+    expected = _configured_api_key()
+    if not x_api_key or not secrets.compare_digest(x_api_key, expected):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
 def verify_admin_key(x_admin_key: str | None = Header(None, alias="X-Admin-Key")):
-    if not settings.admin_api_key:
+    expected = (settings.admin_api_key or "").strip()
+    if not expected:
         raise HTTPException(status_code=503, detail="Admin API not configured")
-    if x_admin_key != settings.admin_api_key:
+    if not x_admin_key or not secrets.compare_digest(x_admin_key, expected):
         raise HTTPException(status_code=401, detail="Invalid admin key")
 
 

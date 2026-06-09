@@ -136,14 +136,15 @@ def org_not_found() -> JobError:
     )
 
 
-def normalize_stored_error(item: Any) -> dict[str, str | None]:
+def normalize_stored_error(item: Any, *, include_detail: bool = False) -> dict[str, str | None]:
     if isinstance(item, dict):
-        return {
+        out = {
             "code": str(item.get("code") or "processing_failed"),
             "message": str(item.get("message") or item.get("detail") or "Processing failed"),
             "hint": item.get("hint"),
-            "detail": item.get("detail"),
+            "detail": item.get("detail") if include_detail else None,
         }
+        return out
     text = str(item).strip() if item is not None else ""
     if not text:
         return {
@@ -156,7 +157,7 @@ def normalize_stored_error(item: Any) -> dict[str, str | None]:
         "code": "legacy",
         "message": _legacy_user_message(text),
         "hint": _legacy_hint(text),
-        "detail": text,
+        "detail": text if include_detail else None,
     }
 
 

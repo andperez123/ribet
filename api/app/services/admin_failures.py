@@ -46,7 +46,7 @@ def list_job_failures(db: Session, *, limit: int = 50) -> JobFailuresResponse:
         org = orgs.get(event.org_id) if event.org_id else None
 
         job_errors = [
-            normalize_stored_error(err)
+            normalize_stored_error(err, include_detail=True)
             for err in (job.errors or [])
         ] if job else []
 

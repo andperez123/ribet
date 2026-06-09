@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEV_API_KEY = "dev-secret"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -28,5 +30,21 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    @property
+    def is_production(self) -> bool:
+        return self.ribet_env.strip().lower() == "production"
+
+
+def validate_settings(cfg: Settings) -> None:
+    """Fail fast when production is misconfigured."""
+    if not cfg.is_production:
+        return
+    key = (cfg.api_key or "").strip()
+    if not key or key == DEV_API_KEY:
+        raise RuntimeError(
+            "API_KEY must be set to a non-default secret when RIBET_ENV=production"
+        )
+
 
 settings = Settings()
+validate_settings(settings)

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { bffAuthErrorResponse } from "@/lib/api/bff-errors";
-import { getFastApiBase, getProxyHeaders } from "@/lib/api/bff";
+import { resolveProxyHeaders } from "@/lib/api/bff-errors";
+import { getFastApiBase } from "@/lib/api/bff";
 
 function isUploadFile(
   value: FormDataEntryValue
@@ -27,14 +27,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    let headers: HeadersInit;
-    try {
-      headers = await getProxyHeaders();
-    } catch (err) {
-      const authResp = bffAuthErrorResponse(err);
-      if (authResp) return authResp;
-      throw err;
-    }
+    const headers = await resolveProxyHeaders();
+    if (headers instanceof NextResponse) return headers;
+
     const res = await fetch(`${getFastApiBase()}/v1/ingest/uploads`, {
       method: "POST",
       headers,
