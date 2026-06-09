@@ -13,7 +13,7 @@ from app.models import IngestJob, Organization
 from app.services.transforms.pipeline import transform_upload
 from app.services.events import emit_event
 from app.services.telemetry import track_stage
-from app.services.progress import recompute_org_progress
+from app.services.pipeline_stage import set_job_pipeline_stage
 from app.services.analysis import run_operational_analysis
 from app.services.job_errors import (
     JobError,
@@ -117,11 +117,13 @@ def process_job(db, job: IngestJob) -> None:
             job_id=job.id,
             extra={"file_name": job.file_name},
         ):
+            set_job_pipeline_stage(db, job, "transform")
             result = transform_upload(db, org, job, job.file_name, job.storage_key)
         job.report_type = result.report_type
         db.commit()
 
         if result.status == "needs_review":
+            set_job_pipeline_stage(db, job, "needs_review")
             emit_event(
                 db,
                 "job_needs_review",
@@ -159,10 +161,13 @@ def process_job(db, job: IngestJob) -> None:
             job_id=job.id,
             extra={"report_type": result.report_type, "row_count": result.row_count},
         ):
+            set_job_pipeline_stage(db, job, "rules")
+            db.commit()
             analysis = run_operational_analysis(db, org.id, job.id, period=result.period)
         report = analysis.report
         job.report_id = report.id
         job.status = "done"
+        set_job_pipeline_stage(db, job, "report_ready")
         job.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(job)

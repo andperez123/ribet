@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Card } from "@/components/ui/Card";
+import { SourceTraceabilityChip } from "@/features/reports/SourceTraceabilityChip";
 import { sortDomainInsights } from "@/lib/dashboard/report-signals";
 import { INSIGHT_SEVERITY_STYLES } from "@/lib/dashboard/utils";
 import type { DomainInsight } from "@/lib/types/report";
@@ -43,7 +44,11 @@ function InsightCard({ insight }: { insight: DomainInsight }) {
         </p>
       )}
       {insight.source_label && (
-        <p className="mt-3 text-xs text-ribet-muted">{insight.source_label}</p>
+        <SourceTraceabilityChip
+          sourceLabel={insight.source_label}
+          metricKey={insight.metric_label ?? undefined}
+          className="mt-3"
+        />
       )}
     </Card>
   );

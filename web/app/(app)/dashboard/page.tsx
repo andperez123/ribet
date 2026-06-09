@@ -1,19 +1,19 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { AgentIntelligenceRail } from "@/features/agents/AgentIntelligenceRail";
+import { AgentsWaitingPanel } from "@/features/agents/AgentsWaitingPanel";
+import { SectorCoverageMap } from "@/features/agents/SectorCoverageMap";
 import { DashboardAutoRefresh } from "@/features/dashboard/DashboardAutoRefresh";
 import { DashboardFailedJobsBanner } from "@/features/dashboard/DashboardFailedJobsBanner";
 import { DashboardProcessingBanner } from "@/features/dashboard/DashboardProcessingBanner";
-import { ExecutiveSummaryCards } from "@/features/dashboard/ExecutiveSummaryCards";
 import { FindingsList } from "@/features/dashboard/FindingsList";
-import { HealthComponentsGrid } from "@/features/dashboard/HealthComponentsGrid";
-import { HealthScoreHero } from "@/features/dashboard/HealthScoreHero";
 import { HealthTrend } from "@/features/dashboard/HealthTrend";
-import { ImproveAnalysisPanel } from "@/features/dashboard/ImproveAnalysisPanel";
-import { SectorProgressPanel } from "@/features/dashboard/SectorProgressPanel";
-import { SnapshotKpiGrid } from "@/features/dashboard/SnapshotKpiGrid";
+import { ReportConfidenceHeader } from "@/features/dashboard/ReportConfidenceHeader";
+import { TopSignalsHero } from "@/features/dashboard/TopSignalsHero";
 import { UploadsTable } from "@/features/dashboard/UploadsTable";
 import { serverData } from "@/lib/api/server-data";
+import { buildTopSignals } from "@/lib/dashboard/report-signals";
 
 export default async function DashboardPage({
   searchParams,
@@ -28,8 +28,6 @@ export default async function DashboardPage({
     jobs,
     progress,
     orgCoverage,
-    snapshotLatest,
-    snapshotHistory,
   ] = await Promise.all([
     serverData.latestReport(),
     serverData.findings(20),
@@ -38,20 +36,15 @@ export default async function DashboardPage({
     serverData.ingestJobs(20),
     serverData.orgProgress(),
     serverData.orgCoverage(),
-    serverData.snapshotsLatest(),
-    serverData.snapshotsHistory(12),
   ]);
-
-  const priorSnapshot =
-    snapshotHistory?.snapshots.find(
-      (s) => s.period !== snapshotLatest?.period
-    ) ?? null;
 
   const jobList = jobs?.jobs ?? [];
   const hasActiveJobs = jobList.some(
     (j) => j.status === "pending" || j.status === "processing"
   );
   const hasFailedJobs = jobList.some((j) => j.status === "error");
+  const contract = report?.report_contract;
+  const topSignals = report ? buildTopSignals(report, findings ?? []) : [];
 
   return (
     <div className="space-y-8">
@@ -64,7 +57,7 @@ export default async function DashboardPage({
             Dashboard
           </h1>
           <p className="mt-1 text-sm text-ribet-muted">
-            Operational health and findings from your latest data.
+            Operational health and intelligence from your latest data.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -103,36 +96,41 @@ export default async function DashboardPage({
         />
       ) : report ? (
         <>
-          {healthScore && <HealthScoreHero score={healthScore} />}
-          {healthScore && <HealthComponentsGrid score={healthScore} />}
-          <ExecutiveSummaryCards report={report} />
+          <ReportConfidenceHeader
+            reportId={report.id}
+            healthScore={report.health_score}
+            healthStatus={report.health_status}
+            generatedAt={report.generated_at}
+            confidenceScore={contract?.confidence_score}
+            orgCoverage={orgCoverage}
+            coverage={{
+              ar: report.data_coverage?.ar ?? false,
+              ap: report.data_coverage?.ap ?? false,
+              gl: report.data_coverage?.gl ?? false,
+              inventory: report.data_coverage?.inventory ?? false,
+            }}
+            orgHealthScore={healthScore}
+            variant="dashboard"
+          />
+          {contract?.agent_roster?.length ? (
+            <AgentIntelligenceRail agents={contract.agent_roster} />
+          ) : null}
+          {topSignals.length > 0 && <TopSignalsHero signals={topSignals} />}
+          <AgentsWaitingPanel
+            agents={contract?.agent_roster}
+            blockedAnalyses={contract?.blocked_analyses}
+          />
         </>
       ) : null}
-
-      {snapshotLatest && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-ribet-text">
-            Operational snapshot
-          </h2>
-          <SnapshotKpiGrid
-            current={snapshotLatest}
-            prior={priorSnapshot}
-          />
-        </section>
-      )}
 
       {healthHistory && healthHistory.snapshots.length > 1 && (
         <HealthTrend history={healthHistory} />
       )}
 
-      {orgCoverage && (
-        <ImproveAnalysisPanel coverage={orgCoverage} />
-      )}
-
       {progress && (
-        <SectorProgressPanel
+        <SectorCoverageMap
           progress={progress}
-          findings={findings ?? undefined}
+          agentRoster={contract?.agent_roster}
         />
       )}
 

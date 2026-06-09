@@ -1,34 +1,33 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
-import { AnalystNarrativePanel } from "@/features/dashboard/AnalystNarrativePanel";
-import { TopRisksPanel } from "@/features/dashboard/TopRisksPanel";
+import { AgentIntelligenceRail } from "@/features/agents/AgentIntelligenceRail";
+import { BlockedAnalysesPanel } from "@/features/dashboard/BlockedAnalysesPanel";
 import { CoverageDeltaBanner } from "@/features/dashboard/CoverageDeltaBanner";
-import { DataCoverageBanner } from "@/features/dashboard/DataCoverageBanner";
 import { DeleteReportButton } from "@/features/dashboard/DeleteReportButton";
+import { EvidencePackPanel } from "@/features/dashboard/EvidencePackPanel";
+import { EvidenceSummaryPanel } from "@/features/dashboard/EvidenceSummaryPanel";
+import { ExecutiveAnalysisPanel } from "@/features/dashboard/ExecutiveAnalysisPanel";
+import { InsightCardsGrid } from "@/features/dashboard/InsightCardsGrid";
+import { ReportActionItems } from "@/features/dashboard/ReportActionItems";
+import { ReportAnalysisDebugPanel } from "@/features/dashboard/ReportAnalysisDebugPanel";
+import { ReportConfidenceHeader } from "@/features/dashboard/ReportConfidenceHeader";
+import { ReportFindingsList } from "@/features/dashboard/ReportFindingsList";
 import {
   OrgWideSynthesisPanel,
   PrimaryAnalysisPanel,
 } from "@/features/dashboard/ReportAnalysisSections";
-import { ReportActionItems } from "@/features/dashboard/ReportActionItems";
-import { ReportAnalysisDebugPanel } from "@/features/dashboard/ReportAnalysisDebugPanel";
-import { ReportFindingsList } from "@/features/dashboard/ReportFindingsList";
 import { ReportSections } from "@/features/dashboard/ReportSections";
-import { TopEntitiesPanel } from "@/features/dashboard/TopEntitiesPanel";
 import { TopSignalsHero } from "@/features/dashboard/TopSignalsHero";
 import { UnlocksFromUploadPanel } from "@/features/dashboard/UnlocksFromUploadPanel";
-import { WeeklyBriefPanel } from "@/features/dashboard/WeeklyBriefPanel";
-import { HealthScoreHero } from "@/features/dashboard/HealthScoreHero";
-import { HealthComponentsGrid } from "@/features/dashboard/HealthComponentsGrid";
-import { ConditionalInsightsPanel } from "@/features/dashboard/ConditionalInsightsPanel";
+import { isAdminView } from "@/lib/admin/is-admin-view";
 import { serverData } from "@/lib/api/server-data";
 import {
   buildTopSignals,
   getActionItems,
   sortDomainInsights,
 } from "@/lib/dashboard/report-signals";
-import { digestHasData, formatDate, healthStatusColor } from "@/lib/dashboard/utils";
+import { digestHasData } from "@/lib/dashboard/utils";
 import type {
   AnalysisMetadata,
   AnalystOutput,
@@ -83,17 +82,14 @@ const EMPTY_METADATA: AnalysisMetadata = {
   data_domains_present: [],
 };
 
-const showDebugPanel =
-  process.env.RIBET_DEBUG === "true" ||
-  process.env.NODE_ENV === "development";
-
 export default async function ReportPage({ params }: Props) {
   const { id } = await params;
-  const [report, brief, healthScore, findings] = await Promise.all([
+  const [report, healthScore, findings, orgCoverage, showAdmin] = await Promise.all([
     serverData.report(id),
-    serverData.weeklyBrief(id),
     serverData.healthScore(),
     serverData.findings(50, id),
+    serverData.orgCoverage(),
+    isAdminView(),
   ]);
 
   if (!report) notFound();
@@ -109,6 +105,8 @@ export default async function ReportPage({ params }: Props) {
   const hasData = digestHasData(digest);
   const topSignals = buildTopSignals(report, findings ?? []);
   const actionItems = getActionItems(report, findings ?? []);
+  const hasEvidencePack = Boolean(report.evidence_pack);
+  const verifiedFindings = topSignals.map((s) => s.title);
 
   if (hasData && insights.length === 0) {
     console.error(
@@ -118,49 +116,32 @@ export default async function ReportPage({ params }: Props) {
 
   return (
     <div className="space-y-8">
-      <div>
-        <Link
-          href="/dashboard"
-          className="text-sm font-medium text-ribet-muted hover:text-ribet-text"
-        >
-          ← Dashboard
-        </Link>
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-ribet-text md:text-3xl">
-          Operational Health Report
-        </h1>
-        <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-ribet-muted">
-          <span>Generated {formatDate(report.generated_at)}</span>
-          <Badge variant="default">{report.health_score} / 100</Badge>
-          <span className={healthStatusColor(report.health_status)}>
-            {report.health_status}
-          </span>
-          <a
-            href={`/api/reports/${report.id}/pdf`}
-            className="font-medium text-ribet-green hover:underline"
-            download
-          >
-            Download PDF
-          </a>
-          <DeleteReportButton
-            reportId={report.id}
-            redirectTo="/dashboard/reports"
-          />
-        </div>
+      <ReportConfidenceHeader
+        reportId={report.id}
+        healthScore={report.health_score}
+        healthStatus={report.health_status}
+        generatedAt={report.generated_at}
+        confidenceScore={contract?.confidence_score}
+        orgCoverage={orgCoverage}
+        coverage={coverage}
+        orgHealthScore={healthScore}
+      />
+
+      <div className="flex flex-wrap gap-3">
+        <DeleteReportButton reportId={report.id} redirectTo="/dashboard/reports" />
       </div>
-
-      {healthScore && <HealthScoreHero score={healthScore} />}
-      {healthScore && hasData && (
-        <HealthComponentsGrid score={healthScore} analystOutput={analystOutput} />
-      )}
-
-      <DataCoverageBanner coverage={coverage} digest={digest} />
 
       {(contract?.coverage_delta || contract?.confidence_score) && (
         <CoverageDeltaBanner
           coverageDelta={contract?.coverage_delta}
           confidenceScore={contract?.confidence_score}
+          unlocks={contract?.unlocks_from_this_upload}
         />
       )}
+
+      {contract?.agent_roster?.length ? (
+        <AgentIntelligenceRail agents={contract.agent_roster} />
+      ) : null}
 
       {!hasData && (
         <Card className="border-dashed">
@@ -179,62 +160,77 @@ export default async function ReportPage({ params }: Props) {
 
       {hasData && (
         <>
-          <TopSignalsHero signals={topSignals} />
-          <TopRisksPanel analystOutput={analystOutput} />
-          <ReportActionItems actionItems={actionItems} findings={findings ?? []} />
+          <TopSignalsHero
+            signals={topSignals}
+            evidenceAnchorHref={hasEvidencePack ? "#evidence-pack-detail" : undefined}
+          />
 
-          <PrimaryAnalysisPanel
-            primary={contract?.primary_analysis}
+          <EvidenceSummaryPanel
             digest={digest}
             coverage={coverage}
-            insights={insights}
+            metadata={metadata}
+            rulesExecuted={findings?.length}
+            evidenceSummary={contract?.evidence_summary}
+            hasEvidencePack={hasEvidencePack}
+            showAdminLink={showAdmin}
           />
+
+          <BlockedAnalysesPanel
+            blockedAnalyses={contract?.blocked_analyses}
+            coverageGaps={contract?.coverage_gaps}
+            analystOutput={analystOutput}
+          />
+
+          <ReportActionItems actionItems={actionItems} findings={findings ?? []} />
+
+          <ExecutiveAnalysisPanel
+            analystSummary={report.analyst_summary}
+            managementQuestions={report.management_questions}
+            metadata={metadata}
+            executiveSummary={report.executive_summary}
+            analystOutput={analystOutput}
+            verifiedFindings={verifiedFindings}
+          />
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <PrimaryAnalysisPanel
+              primary={contract?.primary_analysis}
+              digest={digest}
+              coverage={coverage}
+              insights={insights.filter(
+                (i) =>
+                  !contract?.primary_analysis?.triggered_by?.length ||
+                  contract.primary_analysis.triggered_by.includes(i.domain)
+              )}
+            />
+            <OrgWideSynthesisPanel
+              synthesis={contract?.org_wide_synthesis}
+              conditionalInsights={analystOutput?.conditional_insights}
+            />
+          </div>
 
           <UnlocksFromUploadPanel unlocks={contract?.unlocks_from_this_upload} />
 
-          <OrgWideSynthesisPanel synthesis={contract?.org_wide_synthesis} />
+          <InsightCardsGrid insights={insights} />
 
-          <ConditionalInsightsPanel analystOutput={analystOutput} />
-
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2">
-              <AnalystNarrativePanel
-                analystSummary={report.analyst_summary}
-                managementQuestions={report.management_questions}
-                metadata={metadata}
-                executiveSummary={report.executive_summary}
-                analystOutput={analystOutput}
-              />
-            </div>
-            <div>{brief && <WeeklyBriefPanel brief={brief} />}</div>
-          </div>
-
-          {(report.improvement_notes?.length ?? 0) > 0 && (
-            <Card>
-              <h2 className="text-sm font-semibold text-ribet-text">
-                Since last upload
-              </h2>
-              <ul className="mt-3 space-y-2 text-sm text-ribet-muted">
-                {report.improvement_notes?.map((note) => (
-                  <li key={note.message}>{note.message}</li>
-                ))}
-              </ul>
-            </Card>
-          )}
-
-          <TopEntitiesPanel digest={digest} coverage={coverage} />
+          <ReportFindingsList findings={findings ?? []} hasEvidencePack={hasEvidencePack} />
         </>
       )}
 
-      <ReportFindingsList findings={findings ?? []} />
-
-      {showDebugPanel && (
-        <ReportAnalysisDebugPanel
-          digest={digest}
-          coverage={coverage}
-          metadata={metadata}
-          orgId={report.org_id}
-        />
+      {showAdmin && (
+        <>
+          <EvidencePackPanel
+            evidencePack={report.evidence_pack}
+            evidenceSummary={contract?.evidence_summary}
+            generatedAt={report.generated_at}
+          />
+          <ReportAnalysisDebugPanel
+            digest={digest}
+            coverage={coverage}
+            metadata={metadata}
+            orgId={report.org_id}
+          />
+        </>
       )}
 
       <ReportSections report={report} />

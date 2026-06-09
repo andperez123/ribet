@@ -49,15 +49,66 @@ export type DomainInsight = {
   source_label?: string | null;
 };
 
+export type SignalTrace = {
+  upload_label?: string;
+  period?: string;
+  row_count?: number;
+  job_id?: string | null;
+  report_type?: string | null;
+  finding_id?: string | null;
+  metric_keys?: string[];
+  evidence_verified?: boolean;
+};
+
 export type TopSignal = {
   kind: "finding" | "insight" | "executive";
   title: string;
   body: string;
   severity: string;
+  why_it_matters?: string;
   metric_label?: string;
   metric_value?: string;
   suggested_action?: string;
   source?: string;
+  finding_id?: string | null;
+  source_trace?: SignalTrace | null;
+};
+
+export type BlockedAnalysis = {
+  analysis_name: string;
+  reason: string;
+  requires_uploads: string[];
+};
+
+export type EvidenceSummarySource = {
+  label: string;
+  detail: string;
+};
+
+export type EvidenceSummary = {
+  schema_version: string;
+  generated_at?: string | null;
+  metric_count: number;
+  finding_count: number;
+  coverage_domains: number;
+  confidence_score?: number | null;
+  rules_executed: number;
+  sources: EvidenceSummarySource[];
+};
+
+export type AgentRosterEntry = {
+  agent: string;
+  domain_scope: string;
+  status: "running" | "complete" | "needs_data" | "locked";
+  status_message: string;
+  last_completed_at?: string | null;
+  analysis_duration_ms?: number | null;
+  evidence_pack_version?: string | null;
+};
+
+export type UnlocksFromUpload = {
+  unlocked: ReportUnlock[];
+  still_gated: ReportUnlock[];
 };
 
 export type ActionItem = {
@@ -75,6 +126,9 @@ export type SourceTraceability = {
   row_count: number;
   job_id?: string | null;
   report_type?: string | null;
+  finding_id?: string | null;
+  metric_keys?: string[];
+  evidence_verified?: boolean;
 };
 
 export type ReportUnlock = {
@@ -119,7 +173,10 @@ export type ReportContract = {
     reason: string;
     recommended_uploads?: string[];
   }>;
-  unlocks_from_this_upload?: ReportUnlock[];
+  unlocks_from_this_upload?: ReportUnlock[] | UnlocksFromUpload;
+  blocked_analyses?: BlockedAnalysis[];
+  evidence_summary?: EvidenceSummary;
+  agent_roster?: AgentRosterEntry[];
   source_traceability?: SourceTraceability;
   confidence_score?: ConfidenceScore;
   coverage_delta?: CoverageDelta | null;
@@ -137,13 +194,14 @@ export type DataCoverage = {
 };
 
 export type AnalysisMetadata = {
-  narration: "completed" | "skipped" | "failed" | "legacy";
+  narration: "completed" | "skipped" | "failed" | "legacy" | "fallback";
   model?: string | null;
   finding_count: number;
   narrated_count: number;
   data_domains_present: string[];
   duration_ms?: number | null;
   insights_source?: string | null;
+  verification_status?: string | null;
 };
 
 export type ReportFinding = {
@@ -289,6 +347,17 @@ export type IngestJobRecord = {
   created_at?: string | null;
   updated_at?: string | null;
   intake_metadata?: import("@/lib/upload/job-errors").IntakeMetadata | null;
+  pipeline_stage?:
+    | "pending"
+    | "transform"
+    | "rules"
+    | "evidence_pack"
+    | "ai_analyst"
+    | "verification"
+    | "report_ready"
+    | "needs_review"
+    | "error"
+    | null;
 };
 
 export type IngestJobsResponse = {

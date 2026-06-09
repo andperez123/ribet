@@ -22,6 +22,8 @@ from app.services.ai_analyst.runner import (
     run_ai_analyst,
 )
 from app.services.evidence_pack import build_evidence_pack, persist_evidence_pack
+from app.services.agent_contract import finalize_report_contract
+from app.services.pipeline_stage import set_job_pipeline_stage
 from app.services.report_contract import build_report_contract, get_covered_domains
 from app.services.report_insights import validate_insights_invariant
 from app.services.analysis_context import AnalysisContext
@@ -320,6 +322,8 @@ def generate_report(
             db.flush()
 
     with track_stage(db, "evidence_pack", org_id=org_id, job_id=job_id, report_id=report.id):
+        trigger_job_ref = db.get(IngestJob, job_id) if job_id else None
+        set_job_pipeline_stage(db, trigger_job_ref, "evidence_pack")
         pack = build_evidence_pack(db, report.id, findings=findings)
         persist_evidence_pack(db, report.id, pack)
 
@@ -335,7 +339,9 @@ def generate_report(
         db.commit()
 
     with track_stage(db, "ai_analyst", org_id=org_id, job_id=job_id, report_id=report.id):
+        set_job_pipeline_stage(db, trigger_job_ref, "ai_analyst")
         analyst_result = run_ai_analyst(pack)
+        set_job_pipeline_stage(db, trigger_job_ref, "verification")
         persist_report_narrative(db, report.id, org_id, analyst_result)
 
     if analyst_result.skipped:
@@ -386,6 +392,19 @@ def generate_report(
     report.analyst_summary = analyst_summary
     report.management_questions = management_questions
     report.analysis_metadata = _analysis_metadata_from_analyst(analyst_result, len(findings), coverage)
+
+    report.report_contract = finalize_report_contract(
+        report.report_contract or {},
+        db,
+        org_id,
+        findings,
+        coverage,
+        primary_digest,
+        pack,
+        analyst_result,
+        trigger_job,
+        period_label,
+    )
 
     if job_id:
         job = db.get(IngestJob, job_id)

@@ -12,6 +12,17 @@ export type UploadSector =
   | "orders"
   | "sales";
 
+export type PipelineStage =
+  | "pending"
+  | "transform"
+  | "rules"
+  | "evidence_pack"
+  | "ai_analyst"
+  | "verification"
+  | "report_ready"
+  | "needs_review"
+  | "error";
+
 export type UploadFileMeta = {
   id: string;
   name: string;
@@ -22,6 +33,7 @@ export type UploadFileMeta = {
   error?: import("@/lib/upload/job-errors").JobError;
   reportId?: string;
   intakeMetadata?: import("@/lib/upload/job-errors").IntakeMetadata | null;
+  pipelineStage?: PipelineStage | null;
 };
 
 export interface UploadClient {
@@ -54,6 +66,7 @@ export type UploadJob = {
   created_at?: string | null;
   updated_at?: string | null;
   intake_metadata?: import("@/lib/upload/job-errors").IntakeMetadata | null;
+  pipeline_stage?: PipelineStage | null;
 };
 
 export type UploadJobsResponse = {

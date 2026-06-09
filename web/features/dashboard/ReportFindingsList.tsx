@@ -1,8 +1,15 @@
 import { Card } from "@/components/ui/Card";
+import { SourceTraceabilityChip } from "@/features/reports/SourceTraceabilityChip";
 import { SeverityBadge } from "@/features/dashboard/SeverityBadge";
 import type { Finding } from "@/lib/types/report";
 
-export function ReportFindingsList({ findings }: { findings: Finding[] }) {
+export function ReportFindingsList({
+  findings,
+  hasEvidencePack,
+}: {
+  findings: Finding[];
+  hasEvidencePack?: boolean;
+}) {
   if (!findings.length) {
     return (
       <Card>
@@ -18,7 +25,7 @@ export function ReportFindingsList({ findings }: { findings: Finding[] }) {
   return (
     <Card className="p-0">
       <div className="border-b border-ribet-border px-6 py-4">
-        <h2 className="text-sm font-semibold text-ribet-text">Findings</h2>
+        <h2 className="text-sm font-semibold text-ribet-text">Full findings</h2>
         <p className="mt-1 text-xs text-ribet-muted">
           {findings.length} finding(s) for this report
         </p>
@@ -43,6 +50,12 @@ export function ReportFindingsList({ findings }: { findings: Finding[] }) {
                 {f.gap_recommendation}
               </p>
             )}
+            <SourceTraceabilityChip
+              findingId={f.finding_id}
+              metricKey={f.finding_type}
+              evidenceVerified={hasEvidencePack && Boolean(f.finding_id)}
+              className="mt-3"
+            />
             <p className="mt-2 text-xs text-ribet-muted">
               {f.department} · {f.category}
             </p>

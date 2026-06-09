@@ -135,8 +135,10 @@ def build_top_signals(
                 "kind": "finding",
                 "title": f.title,
                 "body": f.detail,
+                "why_it_matters": f.business_impact or f.detail,
                 "severity": f.severity,
                 "suggested_action": f.suggested_action or None,
+                "finding_id": f.finding_id or None,
             }
         )
 
@@ -393,7 +395,7 @@ def build_report_contract(
         confidence,
     )
 
-    top_signals = build_top_signals(findings, sorted_insights, executive_summary)
+    top_signals = build_top_signals(findings, sorted_insights, executive_summary, limit=3)
     action_items = build_action_items(findings, gap_specs)
 
     triggered_by = sorted(trigger_domains) if trigger_domains else []

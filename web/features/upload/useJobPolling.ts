@@ -37,6 +37,7 @@ export function useJobPolling(
             reportId: job.report_id ?? undefined,
             error: firstJobError(job.errors) ?? undefined,
             intakeMetadata: job.intake_metadata ?? undefined,
+            pipelineStage: job.pipeline_stage ?? undefined,
           };
         } catch {
           return null;
@@ -54,6 +55,7 @@ export function useJobPolling(
           reportId: u.reportId ?? f.reportId,
           error: u.error,
           intakeMetadata: u.intakeMetadata ?? f.intakeMetadata,
+          pipelineStage: u.pipelineStage ?? f.pipelineStage,
         };
       })
     );

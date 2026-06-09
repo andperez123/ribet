@@ -1,16 +1,23 @@
 import { DataDigestKpiGrid } from "@/features/dashboard/DataDigestKpiGrid";
 import { InsightCardsGrid } from "@/features/dashboard/InsightCardsGrid";
 import { Card } from "@/components/ui/Card";
-import type { DataCoverage, DataDigest, DomainInsight } from "@/lib/types/report";
+import type {
+  AnalystOutput,
+  DataCoverage,
+  DataDigest,
+  DomainInsight,
+} from "@/lib/types/report";
 
 export function OrgWideSynthesisPanel({
   synthesis,
+  conditionalInsights,
 }: {
   synthesis?: {
     org_context_domains?: string[];
     digest?: DataDigest;
     synthesis_insights?: DomainInsight[];
   } | null;
+  conditionalInsights?: AnalystOutput["conditional_insights"];
 }) {
   if (!synthesis?.digest) return null;
 
@@ -44,6 +51,24 @@ export function OrgWideSynthesisPanel({
             Upload additional report types to unlock cross-domain insights.
           </p>
         </Card>
+      )}
+      {conditionalInsights && conditionalInsights.length > 0 && (
+        <div className="space-y-2">
+          {conditionalInsights.map((item, i) => (
+            <Card
+              key={i}
+              className="border-dashed border-ribet-border/60 bg-ribet-card/40"
+            >
+              <p className="text-xs uppercase tracking-wide text-ribet-muted">
+                Locked capability
+              </p>
+              <p className="mt-2 text-sm text-ribet-text">{item.insight}</p>
+              <p className="mt-1 text-xs text-ribet-muted">
+                Upload: {item.requires_upload}
+              </p>
+            </Card>
+          ))}
+        </div>
       )}
     </section>
   );

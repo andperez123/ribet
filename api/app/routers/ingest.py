@@ -35,6 +35,7 @@ def _job_to_schema(job: IngestJob) -> UploadJob:
         created_at=job.created_at.isoformat() if job.created_at else None,
         updated_at=job.updated_at.isoformat() if job.updated_at else None,
         intake_metadata=job.intake_metadata if job.status == "error" else None,
+        pipeline_stage=job.pipeline_stage,
     )
 
 

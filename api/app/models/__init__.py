@@ -63,6 +63,7 @@ class IngestJob(Base):
     mapping_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     mapping_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     intake_metadata: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
+    pipeline_stage: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     duplicate_of_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

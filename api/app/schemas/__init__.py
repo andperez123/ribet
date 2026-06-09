@@ -37,6 +37,7 @@ class UploadJob(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     intake_metadata: dict | None = None
+    pipeline_stage: str | None = None
 
 
 class SectorStatus(BaseModel):

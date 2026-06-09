@@ -22,6 +22,7 @@ import {
 } from "@/lib/sectors";
 import type { UploadSector } from "@/lib/types/upload";
 import { MappingReviewPanel } from "./MappingReviewPanel";
+import { PipelineProgressBar } from "./PipelineProgressBar";
 import { UploadJobErrorPanel } from "./UploadJobErrorPanel";
 import { useJobPolling } from "./useJobPolling";
 import { useUpload } from "./useUpload";
@@ -282,30 +283,43 @@ export function SectorUploadFlow() {
           {files.map((f) => (
             <div
               key={f.id}
-              className="flex items-center gap-3 rounded-lg border border-ribet-border bg-ribet-card px-4 py-3 text-sm"
+              className="rounded-lg border border-ribet-border bg-ribet-card px-4 py-3 text-sm"
             >
-              {f.status === "done" ? (
-                <CheckCircle className="h-4 w-4 shrink-0 text-ribet-green" />
-              ) : f.status === "error" ? (
-                <span className="shrink-0 text-xs font-medium text-ribet-risk">Failed</span>
-              ) : f.status === "needs_review" ? (
-                <span className="text-amber-400 text-xs">?</span>
-              ) : (
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ribet-green" />
+              <div className="flex items-center gap-3">
+                {f.status === "done" ? (
+                  <CheckCircle className="h-4 w-4 shrink-0 text-ribet-green" />
+                ) : f.status === "error" ? (
+                  <span className="shrink-0 text-xs font-medium text-ribet-risk">Failed</span>
+                ) : f.status === "needs_review" ? (
+                  <span className="text-amber-400 text-xs">?</span>
+                ) : (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ribet-green" />
+                )}
+                <span className="flex-1 truncate">{f.name}</span>
+                {f.sector && (
+                  <Badge variant="muted" className="capitalize">
+                    {f.sector}
+                  </Badge>
+                )}
+                <span className="text-xs capitalize text-ribet-muted">
+                  {f.status === "processing"
+                    ? "processing"
+                    : f.status === "error"
+                      ? "failed"
+                      : f.status}
+                </span>
+              </div>
+              {(f.pipelineStage || f.status === "processing") && (
+                <PipelineProgressBar
+                  job={{
+                    id: f.id,
+                    status:
+                      f.status === "uploading" ? "processing" : f.status,
+                    file_name: f.name,
+                    pipeline_stage: f.pipelineStage ?? null,
+                  }}
+                />
               )}
-              <span className="flex-1 truncate">{f.name}</span>
-              {f.sector && (
-                <Badge variant="muted" className="capitalize">
-                  {f.sector}
-                </Badge>
-              )}
-              <span className="text-xs capitalize text-ribet-muted">
-                {f.status === "processing"
-                  ? "processing"
-                  : f.status === "error"
-                    ? "failed"
-                    : f.status}
-              </span>
             </div>
           ))}
           <div className="flex flex-wrap items-center gap-4">
