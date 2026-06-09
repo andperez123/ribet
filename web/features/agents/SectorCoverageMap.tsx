@@ -52,7 +52,7 @@ export function SectorCoverageMap({
       </div>
       {coverage_count < sectors.length && (
         <p className="text-sm text-ribet-muted">
-          <Link href="/#upload" className="font-medium text-ribet-green hover:underline">
+          <Link href="/dashboard/upload" className="font-medium text-ribet-green hover:underline">
             Upload more sectors
           </Link>{" "}
           to unlock cross-domain analyses.

@@ -151,6 +151,46 @@ FINDING_REGISTRY: dict[str, FindingSpec] = {
             "metrics.inventory.orphan_count",
         ),
     ),
+    "po_vendor_late": FindingSpec(
+        "F-PO-001",
+        "orders",
+        (
+            "metrics.orders.late_po_total",
+            "metrics.orders.late_po_count",
+        ),
+    ),
+    "po_late_cluster": FindingSpec(
+        "F-PO-002",
+        "orders",
+        (
+            "metrics.orders.late_po_total",
+            "metrics.orders.late_po_count",
+        ),
+    ),
+    "so_past_due_ship": FindingSpec(
+        "F-SO-001",
+        "sales",
+        (
+            "metrics.sales.past_due_total",
+            "metrics.sales.past_due_count",
+        ),
+    ),
+    "so_backlog_at_risk": FindingSpec(
+        "F-SO-002",
+        "sales",
+        (
+            "metrics.sales.past_due_total",
+            "metrics.sales.past_due_count",
+        ),
+    ),
+    "po_so_fulfillment_gap": FindingSpec(
+        "F-XD-004",
+        "cross",
+        (
+            "metrics.orders.late_po_total",
+            "metrics.sales.past_due_total",
+        ),
+    ),
 }
 
 # Legacy aliases for consumers that still reference old finding_type strings.

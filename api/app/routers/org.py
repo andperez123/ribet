@@ -85,6 +85,16 @@ class OrgSettingsUpdate(BaseModel):
     email_recipients: list[str] = Field(default_factory=list)
 
 
+@router.get("/features")
+def org_features(_: None = Depends(verify_api_key)):
+    """Runtime feature flags for the web app."""
+    return {
+        "narration_enabled": settings.narration_enabled,
+        "narration_env": settings.ribet_narration,
+        "openai_configured": bool(settings.openai_api_key.strip()),
+    }
+
+
 @router.get("/settings", response_model=OrgSettingsOut)
 def get_org_settings(
     org: Organization = Depends(get_organization),

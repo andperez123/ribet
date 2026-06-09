@@ -35,6 +35,10 @@ def run_executive_agent(
         domain_insights["inventory"] = (domain_outputs.get("inventory") or {}).get("domain_insight", "")
     if not domain_insights.get("data_quality"):
         domain_insights["data_quality"] = (domain_outputs.get("data_quality") or {}).get("domain_insight", "")
+    if domain_outputs.get("procurement") and not domain_insights.get("procurement"):
+        domain_insights["procurement"] = domain_outputs["procurement"].get("domain_insight", "")
+    if domain_outputs.get("sales") and not domain_insights.get("sales"):
+        domain_insights["sales"] = domain_outputs["sales"].get("domain_insight", "")
     data["domain_insights"] = domain_insights
     output = AnalystOutput.model_validate(data)
     return output, usage, model

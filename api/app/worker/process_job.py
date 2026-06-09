@@ -129,10 +129,6 @@ def process_job(db, job: IngestJob) -> None:
         return
 
     try:
-        if job.sector in ("orders", "sales"):
-            _fail_job(db, job, sector_disabled(job.sector))
-            return
-
         with track_stage(
             db,
             "transform",

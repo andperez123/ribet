@@ -11,6 +11,8 @@ from app.services.ai_analyst.prompts import (
     CONTROLLER_SYSTEM,
     DATA_QUALITY_SYSTEM,
     INVENTORY_SYSTEM,
+    PROCUREMENT_SYSTEM,
+    SALES_SYSTEM,
 )
 
 
@@ -21,13 +23,25 @@ def _run_domain_agent(system: str, pack: EvidencePack, focus: str) -> dict[str, 
 
 
 def run_domain_agents(pack: EvidencePack) -> dict[str, dict[str, Any]]:
-    tasks = {
+    domains = pack.coverage.domains if pack.coverage else {}
+    tasks: dict[str, tuple[str, str]] = {
         "controller": (CONTROLLER_SYSTEM, "AR, AP, cash timing, customer and vendor concentration"),
         "inventory": (INVENTORY_SYSTEM, "inventory orphans, zero stock, negative quantities"),
         "data_quality": (DATA_QUALITY_SYSTEM, "mapping warnings, data gaps, upload quality"),
     }
+    if domains.get("purchase_orders"):
+        tasks["procurement"] = (
+            PROCUREMENT_SYSTEM,
+            "late purchase orders, vendor expedites, open PO dollars",
+        )
+    if domains.get("sales_orders"):
+        tasks["sales"] = (
+            SALES_SYSTEM,
+            "past-due sales orders, ship risk, revenue backlog",
+        )
+
     results: dict[str, dict[str, Any]] = {}
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=min(5, len(tasks))) as pool:
         futures = {
             pool.submit(_run_domain_agent, system, pack, focus): name
             for name, (system, focus) in tasks.items()

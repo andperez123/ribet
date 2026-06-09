@@ -67,7 +67,7 @@ export function UploadsTable({ jobs }: { jobs: IngestJobRecord[] }) {
                         </Link>
                       ) : job.status === "error" ? (
                         <Link
-                          href="/#upload"
+                          href="/dashboard/upload"
                           className="font-medium text-ribet-green hover:underline"
                         >
                           Re-upload

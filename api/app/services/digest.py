@@ -14,7 +14,7 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import Customer, GlTransaction, InventoryItem, Invoice, Vendor
+from app.models import Customer, GlTransaction, InventoryItem, Invoice, PurchaseOrder, SalesOrder, Vendor
 
 ADJ_KEYWORDS = ["adjustment", "adj", "write-off", "writeoff", "shrinkage"]
 
@@ -60,10 +60,24 @@ class DataDigest:
     inventory_zero_count: int = 0
     inventory_orphan_count: int = 0
 
+    po_count: int = 0
+    po_open_total: float = 0.0
+    po_late_count: int = 0
+    po_late_total: float = 0.0
+    top_late_pos: list[TopEntry] = field(default_factory=list)
+
+    so_count: int = 0
+    so_open_total: float = 0.0
+    so_past_due_count: int = 0
+    so_past_due_total: float = 0.0
+    top_past_due_orders: list[TopEntry] = field(default_factory=list)
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d["top_customers"] = [asdict(t) for t in self.top_customers]
         d["top_vendors"] = [asdict(t) for t in self.top_vendors]
+        d["top_late_pos"] = [asdict(t) for t in self.top_late_pos]
+        d["top_past_due_orders"] = [asdict(t) for t in self.top_past_due_orders]
         return d
 
 
@@ -72,6 +86,8 @@ _REPORT_TYPE_DOMAINS: dict[str, set[str]] = {
     "ap_aging": {"ap"},
     "gl_detail": {"gl"},
     "inventory": {"inventory"},
+    "purchase_orders": {"orders"},
+    "sales_orders": {"sales"},
 }
 
 
@@ -94,6 +110,8 @@ def build_data_digest(
     include_ap = domains is None or "ap" in domains
     include_gl = domains is None or "gl" in domains
     include_inventory = domains is None or "inventory" in domains
+    include_orders = domains is None or "orders" in domains
+    include_sales = domains is None or "sales" in domains
 
     def _apply_job_filter(q, model):
         if source_job_ids:
@@ -123,6 +141,18 @@ def build_data_digest(
         if period:
             q = q.filter(InventoryItem.period_label == period)
         return _apply_job_filter(q, InventoryItem)
+
+    def _po_q():
+        q = db.query(PurchaseOrder).filter(PurchaseOrder.org_id == org_id)
+        if period:
+            q = q.filter(PurchaseOrder.period_label == period)
+        return _apply_job_filter(q, PurchaseOrder)
+
+    def _so_q():
+        q = db.query(SalesOrder).filter(SalesOrder.org_id == org_id)
+        if period:
+            q = q.filter(SalesOrder.period_label == period)
+        return _apply_job_filter(q, SalesOrder)
 
     # --- Accounts Receivable ---
     if not include_ar:
@@ -231,6 +261,46 @@ def build_data_digest(
     digest.inventory_zero_count = sum(1 for i in inv if (i.quantity or 0) == 0)
     digest.inventory_orphan_count = sum(1 for i in inv if not (i.gl_account or "").strip())
 
+    # --- Purchase orders ---
+    if include_orders:
+        pos = _po_q().all()
+        digest.po_count = len(pos)
+        digest.po_open_total = float(sum(p.open_amount or 0 for p in pos))
+        late_pos = [p for p in pos if (p.days_late or 0) >= 7 and (p.open_amount or 0) > 0]
+        digest.po_late_count = len(late_pos)
+        digest.po_late_total = float(sum(p.open_amount or 0 for p in late_pos))
+        for p in sorted(late_pos, key=lambda x: x.open_amount or 0, reverse=True)[:top_n]:
+            amt = float(p.open_amount or 0)
+            digest.top_late_pos.append(
+                TopEntry(
+                    label=p.vendor_name or p.vendor_id,
+                    amount=amt,
+                    pct=(amt / digest.po_late_total * 100) if digest.po_late_total > 0 else 0.0,
+                    detail=f"PO {p.po_id} · {p.days_late or 0} days late"
+                    + (f" · {p.sku}" if p.sku else ""),
+                )
+            )
+
+    # --- Sales orders ---
+    if include_sales:
+        sos = _so_q().all()
+        digest.so_count = len(sos)
+        digest.so_open_total = float(sum(s.open_amount or 0 for s in sos))
+        late_sos = [s for s in sos if (s.days_late or 0) >= 1 and (s.open_amount or 0) > 0]
+        digest.so_past_due_count = len(late_sos)
+        digest.so_past_due_total = float(sum(s.open_amount or 0 for s in late_sos))
+        for s in sorted(late_sos, key=lambda x: x.open_amount or 0, reverse=True)[:top_n]:
+            amt = float(s.open_amount or 0)
+            digest.top_past_due_orders.append(
+                TopEntry(
+                    label=s.customer_name or s.customer_id,
+                    amount=amt,
+                    pct=(amt / digest.so_past_due_total * 100) if digest.so_past_due_total > 0 else 0.0,
+                    detail=f"SO {s.order_id} · {s.days_late or 0} days past due"
+                    + (f" · {s.sku}" if s.sku else ""),
+                )
+            )
+
     return digest
 
 
@@ -247,6 +317,8 @@ def build_data_coverage(
         "ap": digest.ap_total > 0,
         "gl": digest.gl_txn_count > 0,
         "inventory": digest.inventory_item_count > 0,
+        "purchase_orders": digest.po_count > 0,
+        "sales_orders": digest.so_count > 0,
         "ar_present": digest.ar_invoice_count > 0,
         "ar_unmapped": digest.ar_invoice_count > 0 and digest.ar_total <= 0,
         "ap_aging_available": ap_buckets > 0,
@@ -258,7 +330,10 @@ def build_data_coverage(
 
 def digest_has_data(digest: DataDigest) -> bool:
     cov = build_data_coverage(digest)
-    return any(cov.get(k) for k in ("ar", "ap", "gl", "inventory"))
+    return any(
+        cov.get(k)
+        for k in ("ar", "ap", "gl", "inventory", "purchase_orders", "sales_orders")
+    )
 
 
 @dataclass
@@ -304,6 +379,11 @@ _FINDING_DOMAIN: dict[str, str] = {
     "operational_cash_pressure": "risk",
     "ar_ap_working_capital": "risk",
     "gl_inventory_writeoff_pattern": "operational",
+    "po_vendor_late": "orders",
+    "po_late_cluster": "orders",
+    "so_past_due_ship": "sales",
+    "so_backlog_at_risk": "sales",
+    "po_so_fulfillment_gap": "operations",
 }
 
 
@@ -470,6 +550,60 @@ def build_domain_insights(digest: DataDigest, findings) -> list[DomainInsight]:
                 metric_value=str(digest.inventory_item_count),
             )
         )
+
+    if digest.po_count > 0:
+        po_sev = "alert" if digest.po_late_total >= 10_000 else ("watch" if digest.po_late_count else "info")
+        insights.append(
+            DomainInsight(
+                domain="orders",
+                title="Purchase orders",
+                body=(
+                    f"{digest.po_count} open PO line(s) totaling ${digest.po_open_total:,.0f}; "
+                    f"{digest.po_late_count} late (${digest.po_late_total:,.0f})."
+                ),
+                severity=po_sev,
+                metric_label="Late PO value",
+                metric_value=f"${digest.po_late_total:,.0f}",
+            )
+        )
+        for entry in digest.top_late_pos[:3]:
+            insights.append(
+                DomainInsight(
+                    domain="orders",
+                    title=f"Late PO: {entry.label}",
+                    body=f"${entry.amount:,.0f} open — {entry.detail}.",
+                    severity="alert" if entry.amount >= 25_000 else "watch",
+                    metric_label="Days late",
+                    metric_value=entry.detail or "",
+                )
+            )
+
+    if digest.so_count > 0:
+        so_sev = "alert" if digest.so_past_due_total >= 25_000 else ("watch" if digest.so_past_due_count else "info")
+        insights.append(
+            DomainInsight(
+                domain="sales",
+                title="Sales orders",
+                body=(
+                    f"{digest.so_count} open sales order line(s) totaling ${digest.so_open_total:,.0f}; "
+                    f"{digest.so_past_due_count} past due (${digest.so_past_due_total:,.0f})."
+                ),
+                severity=so_sev,
+                metric_label="Past-due SO value",
+                metric_value=f"${digest.so_past_due_total:,.0f}",
+            )
+        )
+        for entry in digest.top_past_due_orders[:3]:
+            insights.append(
+                DomainInsight(
+                    domain="sales",
+                    title=f"Past due: {entry.label}",
+                    body=f"${entry.amount:,.0f} at risk — {entry.detail}.",
+                    severity="alert" if entry.amount >= 25_000 else "watch",
+                    metric_label="Open value",
+                    metric_value=f"${entry.amount:,.0f}",
+                )
+            )
 
     for f in findings:
         fp = getattr(f, "fingerprint", None) or f"{f.finding_type}:{f.title}"

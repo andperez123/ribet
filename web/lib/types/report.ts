@@ -36,6 +36,18 @@ export type DataDigest = {
   inventory_negative_count: number;
   inventory_zero_count: number;
   inventory_orphan_count: number;
+
+  po_count: number;
+  po_open_total: number;
+  po_late_count: number;
+  po_late_total: number;
+  top_late_pos: TopEntry[];
+
+  so_count: number;
+  so_open_total: number;
+  so_past_due_count: number;
+  so_past_due_total: number;
+  top_past_due_orders: TopEntry[];
 };
 
 export type DomainInsight = {
@@ -187,6 +199,8 @@ export type DataCoverage = {
   ap: boolean;
   gl: boolean;
   inventory: boolean;
+  purchase_orders?: boolean;
+  sales_orders?: boolean;
   ar_present?: boolean;
   ar_unmapped?: boolean;
   ap_aging_available?: boolean;

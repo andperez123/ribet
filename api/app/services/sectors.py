@@ -8,15 +8,17 @@ Sector = Literal["financials", "manufacturing", "orders", "sales"]
 
 SECTORS: tuple[str, ...] = ("financials", "manufacturing", "orders", "sales")
 
-ACTIVE_SECTORS: tuple[str, ...] = ("financials", "manufacturing")
+ACTIVE_SECTORS: tuple[str, ...] = ("financials", "manufacturing", "orders", "sales")
 
-COMING_SOON_SECTORS: tuple[str, ...] = ("orders", "sales")
+COMING_SOON_SECTORS: tuple[str, ...] = ()
 
 REPORT_TYPE_TO_SECTOR: dict[str, str] = {
     "ar_aging": "financials",
     "ap_aging": "financials",
     "gl_detail": "financials",
     "inventory": "manufacturing",
+    "purchase_orders": "orders",
+    "sales_orders": "sales",
 }
 
 SECTOR_LABELS: dict[str, str] = {

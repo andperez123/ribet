@@ -11,7 +11,7 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import engine
 from app.db_init import get_database_error, initialize_database, is_database_ready
-from app.routers import admin, brief, health, ingest, org, reports, snapshots
+from app.routers import admin, brief, chat, health, ingest, org, reports, snapshots
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ribet")
@@ -54,6 +54,7 @@ app.include_router(health.router)
 app.include_router(reports.router)
 app.include_router(brief.router)
 app.include_router(snapshots.router)
+app.include_router(chat.router)
 
 
 @app.get("/health")

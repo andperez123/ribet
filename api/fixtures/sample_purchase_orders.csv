@@ -1,0 +1,4 @@
+PO Number,Vendor Name,Promise Date,Open Amount,Status,SKU
+PO-1001,Acme Industrial Supply,2026-05-20,45000,Open,BRG-200
+PO-1002,Global Parts Co,2026-05-15,12500,Open,WID-44
+PO-1003,Precision Metals,2026-06-01,8200,Partial,PLT-09

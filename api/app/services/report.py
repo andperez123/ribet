@@ -171,6 +171,8 @@ def generate_report(
             "ap_aging": "ap",
             "gl_detail": "gl",
             "inventory": "inventory",
+            "purchase_orders": "orders",
+            "sales_orders": "sales",
         }.get(trigger_job.report_type)
 
     with track_stage(db, "rules", org_id=org_id, job_id=job_id):

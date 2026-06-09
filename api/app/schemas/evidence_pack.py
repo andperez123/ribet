@@ -106,6 +106,15 @@ class EvidencePackLockedCapability(BaseModel):
     requires_sectors: int | None = None
 
 
+class EvidencePackRowDetails(BaseModel):
+    ar_overdue_accounts: list[dict[str, Any]] = Field(default_factory=list)
+    ap_late_vendors: list[dict[str, Any]] = Field(default_factory=list)
+    inventory_issues: list[dict[str, Any]] = Field(default_factory=list)
+    late_purchase_orders: list[dict[str, Any]] = Field(default_factory=list)
+    past_due_sales_orders: list[dict[str, Any]] = Field(default_factory=list)
+    extra_column_samples: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class EvidencePack(BaseModel):
     schema_version: str = EVIDENCE_PACK_SCHEMA_VERSION
     agent_ready: bool = True
@@ -130,5 +139,6 @@ class EvidencePack(BaseModel):
     )
     memory: EvidencePackMemory = Field(default_factory=EvidencePackMemory)
     locked_capabilities: list[EvidencePackLockedCapability] = Field(default_factory=list)
+    row_details: EvidencePackRowDetails = Field(default_factory=EvidencePackRowDetails)
 
     model_config = {"extra": "forbid"}

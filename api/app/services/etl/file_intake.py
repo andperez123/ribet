@@ -177,31 +177,11 @@ def intake_csv(content: bytes) -> IntakeResult:
     return IntakeResult(dataframe=df, metadata=meta)
 
 
-def _first_nonempty_sheet(xl: pd.ExcelFile) -> str:
-    for name in xl.sheet_names:
-        df = xl.parse(name, header=None)
-        if not df.empty and df.dropna(how="all").shape[0] > 0:
-            return name
-    return xl.sheet_names[0]
-
-
-def intake_excel(content: bytes, filename: str = "") -> IntakeResult:
-    lower = filename.lower()
-    if lower.endswith(".xls") and not lower.endswith(".xlsx"):
-        raise ValueError(
-            "Legacy .xls workbooks require a separate reader; export as .xlsx or CSV instead"
-        )
-
-    try:
-        xl = pd.ExcelFile(io.BytesIO(content))
-    except Exception as e:
-        raise ValueError(f"Excel read failed: {e}") from e
-    sheet = _first_nonempty_sheet(xl)
+def _parse_excel_sheet(xl: pd.ExcelFile, sheet: str) -> IntakeResult | None:
     raw = xl.parse(sheet, header=None)
     raw = raw.dropna(axis=1, how="all").dropna(axis=0, how="all")
     if raw.empty:
-        meta = IntakeMetadata(sheet_name=sheet, warnings=["empty sheet"])
-        return IntakeResult(dataframe=pd.DataFrame(), metadata=meta)
+        return None
 
     lines = raw.fillna("").astype(str).values.tolist()
     header_idx = _find_header_row(lines)
@@ -220,10 +200,12 @@ def intake_excel(content: bytes, filename: str = "") -> IntakeResult:
 
     df = pd.DataFrame(rows, columns=header)
     df = _clean_dataframe(df)
+    if df.empty:
+        return None
 
     warnings: list[str] = []
     if header_idx > 0:
-        warnings.append(f"skipped {header_idx} preamble row(s) before header")
+        warnings.append(f"sheet '{sheet}': skipped {header_idx} preamble row(s)")
 
     meta = IntakeMetadata(
         encoding="binary",
@@ -234,6 +216,71 @@ def intake_excel(content: bytes, filename: str = "") -> IntakeResult:
         warnings=warnings,
     )
     return IntakeResult(dataframe=df, metadata=meta)
+
+
+def intake_excel(content: bytes, filename: str = "") -> IntakeResult:
+    lower = filename.lower()
+    if lower.endswith(".xls") and not lower.endswith(".xlsx"):
+        raise ValueError(
+            "Legacy .xls workbooks require a separate reader; export as .xlsx or CSV instead"
+        )
+
+    try:
+        xl = pd.ExcelFile(io.BytesIO(content))
+    except Exception as e:
+        raise ValueError(f"Excel read failed: {e}") from e
+
+    parsed: list[IntakeResult] = []
+    for sheet in xl.sheet_names:
+        result = _parse_excel_sheet(xl, sheet)
+        if result is not None:
+            parsed.append(result)
+
+    if not parsed:
+        meta = IntakeMetadata(sheet_name=xl.sheet_names[0] if xl.sheet_names else None, warnings=["empty workbook"])
+        return IntakeResult(dataframe=pd.DataFrame(), metadata=meta)
+
+    groups: dict[tuple[str, ...], list[IntakeResult]] = {}
+    for result in parsed:
+        key = tuple(result.dataframe.columns)
+        groups.setdefault(key, []).append(result)
+
+    warnings: list[str] = []
+    for p in parsed:
+        warnings.extend(p.metadata.warnings)
+
+    if len(groups) == 1:
+        frames = [r.dataframe for r in parsed]
+        df = pd.concat(frames, ignore_index=True)
+        if len(parsed) > 1:
+            sheet_names = ", ".join(r.metadata.sheet_name or "?" for r in parsed)
+            warnings.append(f"merged {len(parsed)} sheets with matching columns: {sheet_names}")
+        primary = parsed[0].metadata
+        meta = IntakeMetadata(
+            encoding=primary.encoding,
+            delimiter=primary.delimiter,
+            header_row_index=primary.header_row_index,
+            skipped_rows=primary.skipped_rows,
+            sheet_name=primary.sheet_name,
+            warnings=warnings,
+        )
+        return IntakeResult(dataframe=df, metadata=meta)
+
+    best = max(parsed, key=lambda r: len(r.dataframe))
+    skipped = [r.metadata.sheet_name for r in parsed if r is not best]
+    warnings.append(
+        f"multiple sheet layouts detected; used '{best.metadata.sheet_name}' "
+        f"({len(best.dataframe)} rows). Skipped: {', '.join(s for s in skipped if s)}"
+    )
+    meta = IntakeMetadata(
+        encoding=best.metadata.encoding,
+        delimiter=best.metadata.delimiter,
+        header_row_index=best.metadata.header_row_index,
+        skipped_rows=best.metadata.skipped_rows,
+        sheet_name=best.metadata.sheet_name,
+        warnings=warnings,
+    )
+    return IntakeResult(dataframe=best.dataframe, metadata=meta)
 
 
 def intake_file(content: bytes, filename: str) -> IntakeResult:

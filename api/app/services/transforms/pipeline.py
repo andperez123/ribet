@@ -12,6 +12,7 @@ from app.models import IngestJob, Organization
 from app.services.etl.detector import detect_report_type
 from app.services.etl.field_mapper import MappingPlan, propose_mapping
 from app.services.etl.profiler import profile_dataframe
+from app.services.mapping_memory import apply_org_mapping_memory
 from app.services.storage import read_upload_to_dataframe
 from app.services.transforms.adapters import generic as generic_adapter
 from app.services.transforms.adapters import jobboss as jobboss_adapter
@@ -63,16 +64,26 @@ def transform_upload(
     intake = read_upload_to_dataframe(storage_key, filename)
     df = intake.dataframe
     columns = list(df.columns)
-    report_type = detect_report_type(filename, columns)
+    report_type = detect_report_type(filename, columns, sector_hint=job.sector)
     profiles = profile_dataframe(df)
     plan = propose_mapping(profiles, report_type, columns)
+    plan = apply_org_mapping_memory(org, plan, columns)
+
+    extra_samples: dict[str, list[str]] = {}
+    for col in plan.unmapped_columns[:25]:
+        if col in df.columns:
+            extra_samples[col] = [
+                str(v).strip()
+                for v in df[col].dropna().head(5).tolist()
+                if str(v).strip()
+            ]
     period = period_from_dataframe(df, column_map=plan.column_map)
     fingerprint = _schema_fingerprint(columns, report_type)
 
     job.intake_metadata = intake.metadata.to_dict()
     job.detected_period = period
     job.schema_fingerprint = fingerprint
-    job.mapping_metadata = plan.to_dict()
+    job.mapping_metadata = {**plan.to_dict(), "extra_column_samples": extra_samples}
     job.mapping_confidence = plan.overall_confidence
 
     if not job.content_hash:

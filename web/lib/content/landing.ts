@@ -26,7 +26,7 @@ export const uploadSection = {
   boxTitle: "Upload your ERP exports",
   boxSubtitle: "CSV or Excel",
   helper: "No ERP integrations required.",
-  accepted: ".csv,.xlsx,.xls",
+  accepted: ".csv,.xlsx",
 };
 
 export type FeatureCard = {

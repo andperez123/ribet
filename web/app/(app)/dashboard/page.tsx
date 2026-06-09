@@ -8,12 +8,66 @@ import { DashboardAutoRefresh } from "@/features/dashboard/DashboardAutoRefresh"
 import { DashboardFailedJobsBanner } from "@/features/dashboard/DashboardFailedJobsBanner";
 import { DashboardProcessingBanner } from "@/features/dashboard/DashboardProcessingBanner";
 import { FindingsList } from "@/features/dashboard/FindingsList";
+import { HealthComponentsGrid } from "@/features/dashboard/HealthComponentsGrid";
 import { HealthTrend } from "@/features/dashboard/HealthTrend";
+import { ImproveAnalysisPanel } from "@/features/dashboard/ImproveAnalysisPanel";
+import { NarrationSetupBanner } from "@/features/dashboard/NarrationSetupBanner";
+import { OperationsChatPanel } from "@/features/dashboard/OperationsChatPanel";
 import { ReportConfidenceHeader } from "@/features/dashboard/ReportConfidenceHeader";
+import { TopEntitiesPanel } from "@/features/dashboard/TopEntitiesPanel";
 import { TopSignalsHero } from "@/features/dashboard/TopSignalsHero";
 import { UploadsTable } from "@/features/dashboard/UploadsTable";
+import { WeeklyBriefPanel } from "@/features/dashboard/WeeklyBriefPanel";
 import { serverData } from "@/lib/api/server-data";
 import { buildTopSignals } from "@/lib/dashboard/report-signals";
+import type { DataCoverage, DataDigest } from "@/lib/types/report";
+
+const EMPTY_DIGEST: DataDigest = {
+  ar_total: 0,
+  ar_over_90: 0,
+  ar_over_90_pct: 0,
+  ar_invoice_count: 0,
+  top_customers: [],
+  ap_total: 0,
+  ap_negative_total: 0,
+  vendor_count: 0,
+  top_vendors: [],
+  ap_current: 0,
+  ap_1_30: 0,
+  ap_31_60: 0,
+  ap_61_90: 0,
+  ap_91_plus: 0,
+  ap_over_60_pct: 0,
+  gl_txn_count: 0,
+  gl_adjustment_total: 0,
+  gl_unmapped_count: 0,
+  inventory_item_count: 0,
+  inventory_total_qty: 0,
+  inventory_negative_count: 0,
+  inventory_zero_count: 0,
+  inventory_orphan_count: 0,
+  po_count: 0,
+  po_open_total: 0,
+  po_late_count: 0,
+  po_late_total: 0,
+  top_late_pos: [],
+  so_count: 0,
+  so_open_total: 0,
+  so_past_due_count: 0,
+  so_past_due_total: 0,
+  top_past_due_orders: [],
+};
+
+const EMPTY_COVERAGE: DataCoverage = {
+  ar: false,
+  ap: false,
+  gl: false,
+  inventory: false,
+  ar_present: false,
+  ar_unmapped: false,
+  ap_aging_available: false,
+  primary_domain: null,
+};
 
 export default async function DashboardPage({
   searchParams,
@@ -28,6 +82,7 @@ export default async function DashboardPage({
     jobs,
     progress,
     orgCoverage,
+    weeklyBrief,
   ] = await Promise.all([
     serverData.latestReport(),
     serverData.findings(20),
@@ -36,6 +91,7 @@ export default async function DashboardPage({
     serverData.ingestJobs(20),
     serverData.orgProgress(),
     serverData.orgCoverage(),
+    serverData.weeklyBrief(),
   ]);
 
   const jobList = jobs?.jobs ?? [];
@@ -45,6 +101,14 @@ export default async function DashboardPage({
   const hasFailedJobs = jobList.some((j) => j.status === "error");
   const contract = report?.report_contract;
   const topSignals = report ? buildTopSignals(report, findings ?? []) : [];
+  const digest = {
+    ...EMPTY_DIGEST,
+    ...(contract?.digest_kpis ?? report?.data_digest ?? {}),
+  };
+  const coverage = {
+    ...EMPTY_COVERAGE,
+    ...(report?.data_coverage ?? {}),
+  };
 
   return (
     <div className="space-y-8">
@@ -70,6 +134,12 @@ export default async function DashboardPage({
             </Link>
           )}
           <Link
+            href="/dashboard/upload"
+            className="rounded-full border border-ribet-border px-5 py-2.5 text-sm font-medium text-ribet-text hover:bg-ribet-card"
+          >
+            Upload files
+          </Link>
+          <Link
             href="/dashboard/reports"
             className="rounded-full border border-ribet-border px-5 py-2.5 text-sm font-medium text-ribet-text hover:bg-ribet-card"
           >
@@ -77,6 +147,8 @@ export default async function DashboardPage({
           </Link>
         </div>
       </div>
+
+      <NarrationSetupBanner />
 
       {!report && hasActiveJobs && (
         <DashboardProcessingBanner
@@ -92,7 +164,7 @@ export default async function DashboardPage({
           title="No report yet"
           description="Upload ERP exports to generate your first operational health report."
           actionLabel="Upload files"
-          actionHref="/#upload"
+          actionHref="/dashboard/upload"
         />
       ) : report ? (
         <>
@@ -112,10 +184,17 @@ export default async function DashboardPage({
             orgHealthScore={healthScore}
             variant="dashboard"
           />
+          {healthScore && (
+            <HealthComponentsGrid
+              score={healthScore}
+              analystOutput={report.analyst_output}
+            />
+          )}
           {contract?.agent_roster?.length ? (
             <AgentIntelligenceRail agents={contract.agent_roster} />
           ) : null}
           {topSignals.length > 0 && <TopSignalsHero signals={topSignals} />}
+          <TopEntitiesPanel digest={digest} coverage={coverage} />
           <AgentsWaitingPanel
             agents={contract?.agent_roster}
             blockedAnalyses={contract?.blocked_analyses}
@@ -123,9 +202,13 @@ export default async function DashboardPage({
         </>
       ) : null}
 
+      {orgCoverage && <ImproveAnalysisPanel coverage={orgCoverage} />}
+
       {healthHistory && healthHistory.snapshots.length > 1 && (
         <HealthTrend history={healthHistory} />
       )}
+
+      {weeklyBrief && <WeeklyBriefPanel brief={weeklyBrief} />}
 
       {progress && (
         <SectorCoverageMap
@@ -133,6 +216,8 @@ export default async function DashboardPage({
           agentRoster={contract?.agent_roster}
         />
       )}
+
+      {report && <OperationsChatPanel reportId={report.id} />}
 
       {jobs && <UploadsTable jobs={jobs.jobs} />}
 

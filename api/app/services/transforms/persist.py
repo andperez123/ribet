@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.models import Customer, GlTransaction, InventoryItem, Invoice, Vendor
+from app.models import Customer, GlTransaction, InventoryItem, Invoice, PurchaseOrder, SalesOrder, Vendor
 from app.services.transforms.canonical.models import CanonicalDataset
 
 
@@ -111,6 +111,60 @@ def persist_canonical(
                     sku=rec.sku,
                     quantity=float(rec.quantity),
                     gl_account=rec.gl_account,
+                    period_label=period,
+                    source_job_id=job_id,
+                )
+            )
+            total += 1
+
+    if dataset.purchase_orders:
+        db.query(PurchaseOrder).filter(
+            PurchaseOrder.org_id == org_id, PurchaseOrder.period_label == period
+        ).delete(synchronize_session=False)
+        for rec in dataset.purchase_orders:
+            db.add(
+                PurchaseOrder(
+                    org_id=org_id,
+                    po_id=rec.po_id,
+                    vendor_id=rec.vendor_id,
+                    vendor_name=rec.vendor_name,
+                    order_date=rec.order_date,
+                    promise_date=rec.promise_date,
+                    due_date=rec.due_date,
+                    status=rec.status,
+                    line_amount=float(rec.line_amount),
+                    open_amount=float(rec.open_amount),
+                    days_late=rec.days_late,
+                    sku=rec.sku,
+                    qty_ordered=float(rec.qty_ordered) if rec.qty_ordered is not None else None,
+                    qty_received=float(rec.qty_received) if rec.qty_received is not None else None,
+                    period_label=period,
+                    source_job_id=job_id,
+                )
+            )
+            total += 1
+
+    if dataset.sales_orders:
+        db.query(SalesOrder).filter(
+            SalesOrder.org_id == org_id, SalesOrder.period_label == period
+        ).delete(synchronize_session=False)
+        for rec in dataset.sales_orders:
+            db.add(
+                SalesOrder(
+                    org_id=org_id,
+                    order_id=rec.order_id,
+                    customer_id=rec.customer_id,
+                    customer_name=rec.customer_name,
+                    order_date=rec.order_date,
+                    ship_date=rec.ship_date,
+                    promise_date=rec.promise_date,
+                    status=rec.status,
+                    line_amount=float(rec.line_amount),
+                    open_amount=float(rec.open_amount),
+                    days_late=rec.days_late,
+                    sku=rec.sku,
+                    qty_ordered=float(rec.qty_ordered) if rec.qty_ordered is not None else None,
+                    qty_open=float(rec.qty_open) if rec.qty_open is not None else None,
                     period_label=period,
                     source_job_id=job_id,
                 )

@@ -82,13 +82,29 @@ function buildKpis(digest: DataDigest, coverage: DataCoverage): KpiItem[] {
           : undefined,
     });
   }
+  if (coverage.purchase_orders) {
+    otherItems.push({
+      label: "Late POs",
+      value: formatCurrency(digest.po_late_total),
+      sub: `${digest.po_late_count} line(s) · ${digest.po_count} open`,
+      variant: digest.po_late_total >= 10_000 ? "warning" : "default",
+    });
+  }
+  if (coverage.sales_orders) {
+    otherItems.push({
+      label: "Past-due SOs",
+      value: formatCurrency(digest.so_past_due_total),
+      sub: `${digest.so_past_due_count} line(s) · ${digest.so_count} open`,
+      variant: digest.so_past_due_total >= 25_000 ? "warning" : "default",
+    });
+  }
 
   if (primary === "ap") {
     items.push(...apItems, ...arItems, ...otherItems);
   } else if (primary === "ar") {
     items.push(...arItems, ...apItems, ...otherItems);
   } else {
-    items.push(...arItems, ...apItems, ...otherItems);
+    items.push(...otherItems, ...arItems, ...apItems);
   }
 
   return items;

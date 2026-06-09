@@ -22,9 +22,13 @@ class Settings(BaseSettings):
     resend_from: str = "Ribet <reports@ribet.local>"
     default_brief_recipient: str = ""
     openai_api_key: str = ""
-    ribet_narration: str = "off"
+    ribet_narration: str = "on"
     ribet_narration_timeout_seconds: int = 90
     openai_model: str = "gpt-4o-mini"
+
+    @property
+    def narration_enabled(self) -> bool:
+        return self.ribet_narration.strip().lower() == "on" and bool(self.openai_api_key.strip())
 
     @property
     def cors_origin_list(self) -> list[str]:

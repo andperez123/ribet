@@ -1,0 +1,4 @@
+Sales Order,Customer Name,Ship Date,Open Amount,Status,SKU
+SO-5001,Big Customer Inc,2026-05-25,125000,Open,ASM-100
+SO-5002,Regional OEM LLC,2026-05-28,34000,Open,ASM-200
+SO-5003,Metro Fabricators,2026-06-02,9800,Open,SUB-01

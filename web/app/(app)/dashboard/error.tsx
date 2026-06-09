@@ -20,12 +20,9 @@ export default function DashboardError({
         Dashboard could not load
       </h1>
       <p className="text-sm text-ribet-muted">
-        The app could not reach the API. On Railway, check the{" "}
-        <strong>web</strong> service: <code className="text-xs">FASTAPI_URL</code>{" "}
-        (private <code className="text-xs">ribet_api</code> reference or temporary{" "}
-        <code className="text-xs">https://api.ribetlab.com</code>) and that{" "}
-        <code className="text-xs">FASTAPI_API_KEY</code> matches API{" "}
-        <code className="text-xs">API_KEY</code>, then redeploy web.
+        We could not reach the Ribet API. Check your connection and try again.
+        If this keeps happening, confirm the API service is running and your
+        account is signed in.
       </p>
       <div className="flex flex-wrap justify-center gap-3">
         <button
@@ -35,6 +32,12 @@ export default function DashboardError({
         >
           Try again
         </button>
+        <Link
+          href="/dashboard/upload"
+          className="rounded-full border border-ribet-border px-5 py-2.5 text-sm font-medium text-ribet-text"
+        >
+          Upload files
+        </Link>
         <Link
           href="/"
           className="rounded-full border border-ribet-border px-5 py-2.5 text-sm font-medium text-ribet-text"

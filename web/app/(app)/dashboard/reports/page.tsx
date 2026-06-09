@@ -37,7 +37,7 @@ export default async function ReportsIndexPage() {
           <div className="mt-6 flex justify-center gap-4">
             <TryDemoButton />
             <Link
-              href="/#upload"
+              href="/dashboard/upload"
               className="rounded-full border border-ribet-border px-5 py-2.5 text-sm font-medium text-ribet-text hover:bg-ribet-card"
             >
               Upload files

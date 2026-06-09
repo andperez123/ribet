@@ -40,11 +40,45 @@ class CanonicalInventoryItem(BaseModel):
     gl_account: str | None = None
 
 
+class CanonicalPurchaseOrder(BaseModel):
+    po_id: str
+    vendor_id: str
+    vendor_name: str | None = None
+    order_date: str | None = None
+    promise_date: str | None = None
+    due_date: str | None = None
+    status: str | None = None
+    line_amount: Decimal = Decimal("0")
+    open_amount: Decimal = Decimal("0")
+    days_late: int = 0
+    sku: str | None = None
+    qty_ordered: Decimal | None = None
+    qty_received: Decimal | None = None
+
+
+class CanonicalSalesOrder(BaseModel):
+    order_id: str
+    customer_id: str
+    customer_name: str | None = None
+    order_date: str | None = None
+    ship_date: str | None = None
+    promise_date: str | None = None
+    status: str | None = None
+    line_amount: Decimal = Decimal("0")
+    open_amount: Decimal = Decimal("0")
+    days_late: int = 0
+    sku: str | None = None
+    qty_ordered: Decimal | None = None
+    qty_open: Decimal | None = None
+
+
 class CanonicalDataset(BaseModel):
     ar: list[CanonicalARRecord] = Field(default_factory=list)
     ap: list[CanonicalAPRecord] = Field(default_factory=list)
     gl: list[CanonicalGLTransaction] = Field(default_factory=list)
     inventory: list[CanonicalInventoryItem] = Field(default_factory=list)
+    purchase_orders: list[CanonicalPurchaseOrder] = Field(default_factory=list)
+    sales_orders: list[CanonicalSalesOrder] = Field(default_factory=list)
 
 
 class OperationalSnapshotData(BaseModel):

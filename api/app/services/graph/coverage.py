@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.models import GlTransaction, IngestJob, InventoryItem, Invoice, Vendor
+from app.models import GlTransaction, IngestJob, InventoryItem, Invoice, PurchaseOrder, SalesOrder, Vendor
 
 COVERAGE_SPECS: list[dict] = [
     {
@@ -50,14 +50,14 @@ COVERAGE_SPECS: list[dict] = [
         "label": "Open Sales Orders",
         "sector": "sales",
         "report_type": "sales_orders",
-        "uploadable": False,
+        "uploadable": True,
     },
     {
         "key": "purchase_orders",
         "label": "Purchase Orders",
         "sector": "orders",
         "report_type": "purchase_orders",
-        "uploadable": False,
+        "uploadable": True,
     },
     {
         "key": "work_orders",
@@ -123,6 +123,14 @@ def _entity_signals(db: Session, org_id: UUID) -> dict[str, bool]:
         is not None,
         "inventory": db.query(InventoryItem.id)
         .filter(InventoryItem.org_id == org_id)
+        .first()
+        is not None,
+        "purchase_orders": db.query(PurchaseOrder.id)
+        .filter(PurchaseOrder.org_id == org_id)
+        .first()
+        is not None,
+        "sales_orders": db.query(SalesOrder.id)
+        .filter(SalesOrder.org_id == org_id)
         .first()
         is not None,
     }

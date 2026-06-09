@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.models import Customer, GlTransaction, InventoryItem, Invoice, Vendor
 from app.services.analysis_context import AnalysisContext
 from app.services.rules.finding_registry import enrich_findings
+from app.services.rules.orders_rules import run_orders_rules
 from app.services.rules.types import RuleFinding, RuleScope
 
 
@@ -84,6 +85,8 @@ def run_rules(
         findings.extend(_check_zero_or_dead_stock_signals(db, ctx))
     if ctx.includes("gl"):
         findings.extend(_check_missing_gl_mappings(db, ctx))
+    if ctx.includes("orders") or ctx.includes("sales"):
+        findings.extend(run_orders_rules(db, ctx))
     return enrich_findings(findings, ctx.period, ctx.org_id)
 
 

@@ -7,10 +7,8 @@ type Props = {
   coverage: OrgCoverage;
 };
 
-function sectorUploadHref(sector: string | null | undefined): string {
-  if (sector === "financials") return "/#upload";
-  if (sector === "manufacturing") return "/#upload";
-  return "/#upload";
+function sectorUploadHref(_sector: string | null | undefined): string {
+  return "/dashboard/upload";
 }
 
 export function ImproveAnalysisPanel({ coverage }: Props) {

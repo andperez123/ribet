@@ -24,7 +24,7 @@ export function DashboardFailedJobsBanner({
           </p>
         </div>
         <Link
-          href="/#upload"
+          href="/dashboard/upload"
           className="text-sm font-medium text-ribet-green hover:underline"
         >
           Upload again →

@@ -45,4 +45,6 @@ export const BFF = {
   briefWeekly: "/api/brief/weekly",
   orgProgress: "/api/org/progress",
   orgCoverage: "/api/org/coverage",
+  orgFeatures: "/api/org/features",
+  chatQuery: "/api/chat/query",
 } as const;

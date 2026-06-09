@@ -95,6 +95,8 @@ _REQUIRED_FIELDS: dict[str, list[str]] = {
     "ap_aging": ["vendor_name"],
     "gl_detail": ["account_id", "amount"],
     "inventory": ["sku"],
+    "purchase_orders": ["po_id", "vendor_name"],
+    "sales_orders": ["order_id", "customer_name"],
 }
 
 

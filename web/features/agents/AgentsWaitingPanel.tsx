@@ -50,7 +50,7 @@ export function AgentsWaitingPanel({
         </div>
       ))}
       <Link
-        href="/#upload"
+        href="/dashboard/upload"
         className="inline-block text-sm font-medium text-ribet-green hover:underline"
       >
         Upload files →

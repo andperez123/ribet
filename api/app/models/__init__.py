@@ -34,6 +34,7 @@ class Organization(Base):
     portfolio_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, nullable=True)
     clerk_org_id: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
     email_recipients: Mapped[Optional[list]] = mapped_column(JsonColumn, default=list)
+    mapping_memory: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     jobs: Mapped[list["IngestJob"]] = relationship(back_populates="organization")
@@ -401,5 +402,51 @@ class InventoryItem(Base):
     sku: Mapped[str] = mapped_column(String(128))
     quantity: Mapped[float] = mapped_column(Float, default=0)
     gl_account: Mapped[Optional[str]] = mapped_column(String(128))
+    period_label: Mapped[str] = mapped_column(String(16), default="unknown")
+    source_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+
+
+class PurchaseOrder(Base):
+    __tablename__ = "purchase_orders"
+    __table_args__ = (Index("ix_po_org_period", "org_id", "period_label"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    po_id: Mapped[str] = mapped_column(String(128))
+    vendor_id: Mapped[str] = mapped_column(String(128))
+    vendor_name: Mapped[Optional[str]] = mapped_column(String(512))
+    order_date: Mapped[Optional[str]] = mapped_column(String(32))
+    promise_date: Mapped[Optional[str]] = mapped_column(String(32))
+    due_date: Mapped[Optional[str]] = mapped_column(String(32))
+    status: Mapped[Optional[str]] = mapped_column(String(64))
+    line_amount: Mapped[float] = mapped_column(Float, default=0)
+    open_amount: Mapped[float] = mapped_column(Float, default=0)
+    days_late: Mapped[int] = mapped_column(Integer, default=0)
+    sku: Mapped[Optional[str]] = mapped_column(String(128))
+    qty_ordered: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    qty_received: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    period_label: Mapped[str] = mapped_column(String(16), default="unknown")
+    source_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
+
+
+class SalesOrder(Base):
+    __tablename__ = "sales_orders"
+    __table_args__ = (Index("ix_so_org_period", "org_id", "period_label"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    org_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    order_id: Mapped[str] = mapped_column(String(128))
+    customer_id: Mapped[str] = mapped_column(String(128))
+    customer_name: Mapped[Optional[str]] = mapped_column(String(512))
+    order_date: Mapped[Optional[str]] = mapped_column(String(32))
+    ship_date: Mapped[Optional[str]] = mapped_column(String(32))
+    promise_date: Mapped[Optional[str]] = mapped_column(String(32))
+    status: Mapped[Optional[str]] = mapped_column(String(64))
+    line_amount: Mapped[float] = mapped_column(Float, default=0)
+    open_amount: Mapped[float] = mapped_column(Float, default=0)
+    days_late: Mapped[int] = mapped_column(Integer, default=0)
+    sku: Mapped[Optional[str]] = mapped_column(String(128))
+    qty_ordered: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    qty_open: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     period_label: Mapped[str] = mapped_column(String(16), default="unknown")
     source_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)

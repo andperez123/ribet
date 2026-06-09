@@ -26,14 +26,12 @@ export const SECTORS: SectorDef[] = [
     label: "Orders",
     description: "Purchase orders, vendor receipts, and procurement.",
     examples: "PO exports, vendor open orders",
-    comingSoon: true,
   },
   {
     id: "sales",
     label: "Sales",
     description: "Sales orders, invoices, and customer revenue.",
     examples: "Sales orders, customer revenue",
-    comingSoon: true,
   },
 ];
 

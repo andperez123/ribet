@@ -10,7 +10,15 @@ def period_from_dataframe(
     column_map: dict[str, str] | None = None,
     fallback: str | None = None,
 ) -> str:
-    canonical_date_fields = ("posted_at", "due_date", "posting_date", "date")
+    canonical_date_fields = (
+        "posted_at",
+        "due_date",
+        "posting_date",
+        "date",
+        "order_date",
+        "promise_date",
+        "ship_date",
+    )
     cols_to_check: list[str] = []
 
     if column_map:

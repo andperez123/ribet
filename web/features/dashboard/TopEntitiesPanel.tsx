@@ -58,7 +58,11 @@ export function TopEntitiesPanel({
 }) {
   const customers = coverage.ar ? digest.top_customers : [];
   const vendors = coverage.ap ? digest.top_vendors : [];
-  if (!customers.length && !vendors.length) return null;
+  const latePos = coverage.purchase_orders ? digest.top_late_pos : [];
+  const pastDueOrders = coverage.sales_orders ? digest.top_past_due_orders : [];
+  if (!customers.length && !vendors.length && !latePos.length && !pastDueOrders.length) {
+    return null;
+  }
 
   return (
     <section className="space-y-3">
@@ -66,6 +70,8 @@ export function TopEntitiesPanel({
       <div className="grid gap-4 lg:grid-cols-2">
         <EntityTable title="Top customers" rows={customers} />
         <EntityTable title="Top vendors" rows={vendors} />
+        <EntityTable title="Late purchase orders" rows={latePos} />
+        <EntityTable title="Past-due sales orders" rows={pastDueOrders} />
       </div>
     </section>
   );

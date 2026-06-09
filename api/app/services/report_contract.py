@@ -22,6 +22,8 @@ REPORT_TYPE_LABELS: dict[str, str] = {
     "ap_aging": "AP Aging",
     "gl_detail": "GL Detail",
     "inventory": "Inventory",
+    "purchase_orders": "Purchase Orders",
+    "sales_orders": "Open Sales Orders",
 }
 
 DOMAIN_TO_REPORT_TYPE: dict[str, str] = {
@@ -29,6 +31,8 @@ DOMAIN_TO_REPORT_TYPE: dict[str, str] = {
     "ap": "ap_aging",
     "gl": "gl_detail",
     "inventory": "inventory",
+    "orders": "purchase_orders",
+    "sales": "sales_orders",
 }
 
 FINDING_GAP_TYPES: dict[str, str] = {
@@ -44,6 +48,7 @@ CROSS_DOMAIN_FINDING_TYPES = {
     "operational_cash_pressure",
     "ar_ap_working_capital",
     "gl_inventory_writeoff_pattern",
+    "po_so_fulfillment_gap",
 }
 
 
@@ -58,6 +63,8 @@ def get_covered_domains(db: Session, org_id: UUID) -> set[str]:
                 "ap_aging": "ap",
                 "gl_detail": "gl",
                 "inventory": "inventory",
+                "purchase_orders": "orders",
+                "sales_orders": "sales",
             }.get(rt)
             if domain:
                 domains.add(domain)

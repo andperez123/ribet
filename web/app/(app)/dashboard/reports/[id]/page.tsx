@@ -8,7 +8,12 @@ import { DeleteReportButton } from "@/features/dashboard/DeleteReportButton";
 import { EvidencePackPanel } from "@/features/dashboard/EvidencePackPanel";
 import { EvidenceSummaryPanel } from "@/features/dashboard/EvidenceSummaryPanel";
 import { ExecutiveAnalysisPanel } from "@/features/dashboard/ExecutiveAnalysisPanel";
+import { HealthComponentsGrid } from "@/features/dashboard/HealthComponentsGrid";
+import { ImproveAnalysisPanel } from "@/features/dashboard/ImproveAnalysisPanel";
 import { InsightCardsGrid } from "@/features/dashboard/InsightCardsGrid";
+import { NarrationSetupBanner } from "@/features/dashboard/NarrationSetupBanner";
+import { OperationsChatPanel } from "@/features/dashboard/OperationsChatPanel";
+import { OperationalCharts } from "@/features/dashboard/OperationalCharts";
 import { ReportActionItems } from "@/features/dashboard/ReportActionItems";
 import { ReportAnalysisDebugPanel } from "@/features/dashboard/ReportAnalysisDebugPanel";
 import { ReportConfidenceHeader } from "@/features/dashboard/ReportConfidenceHeader";
@@ -18,8 +23,10 @@ import {
   PrimaryAnalysisPanel,
 } from "@/features/dashboard/ReportAnalysisSections";
 import { ReportSections } from "@/features/dashboard/ReportSections";
+import { TopEntitiesPanel } from "@/features/dashboard/TopEntitiesPanel";
 import { TopSignalsHero } from "@/features/dashboard/TopSignalsHero";
 import { UnlocksFromUploadPanel } from "@/features/dashboard/UnlocksFromUploadPanel";
+import { WeeklyBriefPanel } from "@/features/dashboard/WeeklyBriefPanel";
 import { isAdminView } from "@/lib/admin/is-admin-view";
 import { serverData } from "@/lib/api/server-data";
 import {
@@ -62,6 +69,16 @@ const EMPTY_DIGEST: DataDigest = {
   inventory_negative_count: 0,
   inventory_zero_count: 0,
   inventory_orphan_count: 0,
+  po_count: 0,
+  po_open_total: 0,
+  po_late_count: 0,
+  po_late_total: 0,
+  top_late_pos: [],
+  so_count: 0,
+  so_open_total: 0,
+  so_past_due_count: 0,
+  so_past_due_total: 0,
+  top_past_due_orders: [],
 };
 
 const EMPTY_COVERAGE: DataCoverage = {
@@ -69,6 +86,8 @@ const EMPTY_COVERAGE: DataCoverage = {
   ap: false,
   gl: false,
   inventory: false,
+  purchase_orders: false,
+  sales_orders: false,
   ar_present: false,
   ar_unmapped: false,
   ap_aging_available: false,
@@ -84,12 +103,13 @@ const EMPTY_METADATA: AnalysisMetadata = {
 
 export default async function ReportPage({ params }: Props) {
   const { id } = await params;
-  const [report, healthScore, findings, orgCoverage, showAdmin] = await Promise.all([
+  const [report, healthScore, findings, orgCoverage, showAdmin, weeklyBrief] = await Promise.all([
     serverData.report(id),
     serverData.healthScore(),
     serverData.findings(50, id),
     serverData.orgCoverage(),
     isAdminView(),
+    serverData.weeklyBrief(id),
   ]);
 
   if (!report) notFound();
@@ -131,6 +151,8 @@ export default async function ReportPage({ params }: Props) {
         <DeleteReportButton reportId={report.id} redirectTo="/dashboard/reports" />
       </div>
 
+      <NarrationSetupBanner />
+
       {(contract?.coverage_delta || contract?.confidence_score) && (
         <CoverageDeltaBanner
           coverageDelta={contract?.coverage_delta}
@@ -150,7 +172,7 @@ export default async function ReportPage({ params }: Props) {
               "Upload AR, AP, GL, or inventory exports to generate operational insights."}
           </p>
           <Link
-            href="/#upload"
+            href="/dashboard/upload"
             className="mt-4 inline-block text-sm font-medium text-ribet-green hover:opacity-90"
           >
             Upload files →
@@ -164,6 +186,16 @@ export default async function ReportPage({ params }: Props) {
             signals={topSignals}
             evidenceAnchorHref={hasEvidencePack ? "#evidence-pack-detail" : undefined}
           />
+
+          {healthScore && (
+            <HealthComponentsGrid
+              score={healthScore}
+              analystOutput={analystOutput}
+            />
+          )}
+
+          <OperationalCharts digest={digest} coverage={coverage} />
+          <TopEntitiesPanel digest={digest} coverage={coverage} />
 
           <EvidenceSummaryPanel
             digest={digest}
@@ -214,6 +246,10 @@ export default async function ReportPage({ params }: Props) {
           <InsightCardsGrid insights={insights} />
 
           <ReportFindingsList findings={findings ?? []} hasEvidencePack={hasEvidencePack} />
+
+          {orgCoverage && <ImproveAnalysisPanel coverage={orgCoverage} />}
+          {weeklyBrief && <WeeklyBriefPanel brief={weeklyBrief} />}
+          <OperationsChatPanel reportId={report.id} />
         </>
       )}
 

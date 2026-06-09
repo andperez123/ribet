@@ -10,6 +10,7 @@ from app.models import IngestJob, Organization
 from app.services.analysis import run_operational_analysis
 from app.services.etl.field_mapper import FieldMapping, MappingPlan
 from app.services.storage import read_upload_to_dataframe
+from app.services.mapping_memory import save_org_mapping_memory
 from app.services.transforms.adapters import generic as generic_adapter
 from app.services.transforms.adapters import jobboss as jobboss_adapter
 from app.services.transforms.persist import persist_canonical
@@ -41,6 +42,11 @@ def get_mapping_review(db: Session, job: IngestJob) -> dict:
     intake = read_upload_to_dataframe(job.storage_key, job.file_name)
     plan = _plan_from_job(job)
     samples = intake.dataframe.head(5).fillna("").astype(str).to_dict(orient="records")
+    from app.services.etl.field_mapper import _REQUIRED_FIELDS
+
+    canonical_fields = sorted(
+        set(_REQUIRED_FIELDS.get(plan.report_type, [])) | set(plan.field_mapping.keys())
+    )
     return {
         "job_id": str(job.id),
         "status": job.status,
@@ -51,6 +57,8 @@ def get_mapping_review(db: Session, job: IngestJob) -> dict:
         "intake_metadata": job.intake_metadata or intake.metadata.to_dict(),
         "sample_rows": samples,
         "columns": list(intake.dataframe.columns),
+        "canonical_fields": canonical_fields,
+        "unmapped_columns": plan.unmapped_columns,
     }
 
 
@@ -80,10 +88,15 @@ def confirm_job_mapping(
     row_count = persist_canonical(db, org.id, job.id, period, dataset)
 
     job.mapping_status = "user_confirmed"
-    job.mapping_metadata = plan.to_dict()
+    prior_meta = job.mapping_metadata or {}
+    job.mapping_metadata = {
+        **plan.to_dict(),
+        "extra_column_samples": prior_meta.get("extra_column_samples") or {},
+    }
     job.mapping_confidence = max(plan.overall_confidence, 0.85)
     job.row_count = row_count
     job.status = "processing"
+    save_org_mapping_memory(org, plan, list(intake.dataframe.columns))
     db.flush()
 
     analysis = run_operational_analysis(db, org.id, job.id, period=period)

@@ -67,10 +67,10 @@ export function PipelineProgressBar({
 
   const displayStages = [
     { stage: "transform", label: "Ingest" },
-    { stage: "transform", label: "Normalize" },
-    { stage: "rules", label: "Brain 1" },
-    { stage: "evidence_pack", label: "Evidence Pack" },
-    { stage: "ai_analyst", label: "Brain 2" },
+    { stage: "transform", label: "Map columns" },
+    { stage: "rules", label: "Analyze" },
+    { stage: "evidence_pack", label: "Build context" },
+    { stage: "ai_analyst", label: "Write brief" },
     { stage: "verification", label: "Verify" },
     { stage: "report_ready", label: "Report" },
   ];

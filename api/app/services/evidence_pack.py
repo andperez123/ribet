@@ -31,6 +31,7 @@ from app.schemas.evidence_pack import (
     EvidencePackHealthComponents,
     EvidencePackLockedCapability,
     EvidencePackMemory,
+    EvidencePackRowDetails,
     EvidencePackTopEntities,
     EvidencePackTrendDelta,
 )
@@ -40,6 +41,7 @@ from app.services.graph.confidence import compute_analysis_confidence
 from app.services.graph.coverage import COVERAGE_SPECS, get_graph_coverage
 from app.services.health import get_prior_snapshot
 from app.services.progress import get_org_progress
+from app.services.row_details import build_row_details
 from app.services.rules.finding_registry import FINDING_REGISTRY
 from app.services.rules.types import RuleFinding
 from app.services.sectors import CAPABILITIES, SECTORS
@@ -94,6 +96,28 @@ def _namespaced_metrics(digest: DataDigest) -> dict:
             "zero_stock_percent": round(zero_pct, 1),
             "orphan_count": digest.inventory_orphan_count,
             "orphan_percent": round(orphan_pct, 1),
+        },
+        "orders": {
+            "po_count": digest.po_count,
+            "open_po_total": digest.po_open_total,
+            "late_po_count": digest.po_late_count,
+            "late_po_total": digest.po_late_total,
+            "top_late_po": {
+                "vendor": digest.top_late_pos[0].label if digest.top_late_pos else None,
+                "amount": digest.top_late_pos[0].amount if digest.top_late_pos else 0,
+                "detail": digest.top_late_pos[0].detail if digest.top_late_pos else None,
+            },
+        },
+        "sales": {
+            "so_count": digest.so_count,
+            "open_so_total": digest.so_open_total,
+            "past_due_count": digest.so_past_due_count,
+            "past_due_total": digest.so_past_due_total,
+            "top_past_due_order": {
+                "customer": digest.top_past_due_orders[0].label if digest.top_past_due_orders else None,
+                "amount": digest.top_past_due_orders[0].amount if digest.top_past_due_orders else 0,
+                "detail": digest.top_past_due_orders[0].detail if digest.top_past_due_orders else None,
+            },
         },
     }
 
@@ -485,11 +509,26 @@ def build_evidence_pack(
     confidence = _build_confidence(db, report.org_id, period, coverage_graph)
     analysis_boundaries = _build_analysis_boundaries(coverage_graph, data_gaps)
 
+    extra_samples: dict[str, list[str]] = {}
+    for job in db.query(IngestJob).filter(IngestJob.org_id == report.org_id).all():
+        meta = job.mapping_metadata or {}
+        for col, samples in (meta.get("extra_column_samples") or {}).items():
+            if col not in extra_samples and samples:
+                extra_samples[col] = samples[:5]
+
+    row_detail_dict = build_row_details(
+        db,
+        report.org_id,
+        period,
+        source_job_ids=job_ids or None,
+        extra_column_samples=extra_samples,
+    )
+
     return EvidencePack(
         schema_version=EVIDENCE_PACK_SCHEMA_VERSION,
         agent_ready=True,
         agent_input_type=EVIDENCE_PACK_SCHEMA_VERSION,
-        raw_data_included=False,
+        raw_data_included=True,
         org_id=str(report.org_id),
         org_name=org_name,
         period=period,
@@ -522,6 +561,7 @@ def build_evidence_pack(
         analysis_boundaries=analysis_boundaries,
         memory=_build_memory_section(db, report.org_id),
         locked_capabilities=_locked_capabilities(org_progress),
+        row_details=EvidencePackRowDetails(**row_detail_dict),
     )
 
 
