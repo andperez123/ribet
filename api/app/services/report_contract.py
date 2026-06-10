@@ -21,6 +21,7 @@ REPORT_TYPE_LABELS: dict[str, str] = {
     "ar_aging": "AR Aging",
     "ap_aging": "AP Aging",
     "gl_detail": "GL Detail",
+    "gl_trial_balance": "GL Trial Balance",
     "inventory": "Inventory",
     "purchase_orders": "Purchase Orders",
     "sales_orders": "Open Sales Orders",

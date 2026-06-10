@@ -20,9 +20,11 @@ from app.services.transforms.canonical.models import (
     CanonicalARRecord,
     CanonicalDataset,
     CanonicalGLTransaction,
+    CanonicalGLTrialBalanceRow,
     CanonicalInventoryItem,
     CanonicalPurchaseOrder,
     CanonicalSalesOrder,
+    RejectedRow,
 )
 
 _SUMMARY_ROW_PATTERNS = re.compile(
@@ -180,6 +182,41 @@ def _valid_entity(value: str) -> bool:
     return True
 
 
+def _derive_tbal_analysis_amount(
+    beginning: Decimal,
+    debits: Decimal,
+    credits: Decimal,
+    ending: Decimal,
+    strategy: str,
+    single_amount: Decimal | None = None,
+) -> Decimal:
+    if strategy == "ending_balance":
+        return ending
+    if strategy == "debit_credit_activity":
+        return debits + credits
+    if strategy == "single_column" and single_amount is not None:
+        return single_amount
+    return ending - beginning
+
+
+def _finalize_dataset_stats(dataset: CanonicalDataset, total_rows: int) -> CanonicalDataset:
+    gl_count = len(dataset.gl_trial_balance) if dataset.gl_trial_balance else len(dataset.gl)
+    normalized = (
+        len(dataset.ar)
+        + len(dataset.ap)
+        + gl_count
+        + len(dataset.inventory)
+        + len(dataset.purchase_orders)
+        + len(dataset.sales_orders)
+    )
+    dataset.normalized_rows = normalized
+    if total_rows > 0:
+        dataset.coverage_score = normalized / total_rows
+    else:
+        dataset.coverage_score = 0.0
+    return dataset
+
+
 def dataframe_to_canonical(
     report_type: str,
     df: pd.DataFrame,
@@ -256,6 +293,7 @@ def dataframe_to_canonical(
         for i, row in df.iterrows():
             acct = _safe_str(row.get("account_id", ""))
             if not acct:
+                dataset.rejected_rows.append(RejectedRow(row_index=int(i), reason="missing account_id"))
                 continue
             dataset.gl.append(
                 CanonicalGLTransaction(
@@ -264,6 +302,45 @@ def dataframe_to_canonical(
                     account_name=_safe_str(row.get("account_name", "")) or None,
                     amount=_dec(row.get("amount", 0)),
                     posted_at=_safe_str(row.get("posted_at", "")) or None,
+                )
+            )
+    elif report_type == "gl_trial_balance":
+        strategy = plan.amount_strategy if plan else "net_activity"
+        if strategy == "needs_user_choice":
+            strategy = "net_activity"
+        for i, row in df.iterrows():
+            source_row = source_df.loc[i]
+            acct = _safe_str(row.get("account_id", ""))
+            if not acct:
+                dataset.rejected_rows.append(RejectedRow(row_index=int(i), reason="missing account_id"))
+                continue
+            beginning = _dec(row.get("beginning_balance", source_row.get("BEG_BAL", 0)))
+            debits = _dec(row.get("debits", source_row.get("DEBITS", 0)))
+            credits = _dec(row.get("credits", source_row.get("CREDITS", 0)))
+            ending = _dec(row.get("ending_balance", source_row.get("END_BAL", 0)))
+            net_activity = ending - beginning
+            single_amt = _dec(row.get("amount", 0)) if "amount" in row.index else None
+            analysis_amount = _derive_tbal_analysis_amount(
+                beginning, debits, credits, ending, strategy, single_amt
+            )
+            tbal_row = CanonicalGLTrialBalanceRow(
+                account_id=acct,
+                account_name=_safe_str(row.get("account_name", "")) or None,
+                beginning_balance=beginning,
+                debits=debits,
+                credits=credits,
+                ending_balance=ending,
+                net_activity=net_activity,
+                analysis_amount=analysis_amount,
+            )
+            dataset.gl_trial_balance.append(tbal_row)
+            dataset.gl.append(
+                CanonicalGLTransaction(
+                    transaction_id=f"gl-tbal-{i}",
+                    account_id=acct,
+                    account_name=tbal_row.account_name,
+                    amount=analysis_amount,
+                    posted_at=None,
                 )
             )
     elif report_type == "inventory":
@@ -350,4 +427,4 @@ def dataframe_to_canonical(
                 )
             )
 
-    return dataset
+    return _finalize_dataset_stats(dataset, len(source_df))

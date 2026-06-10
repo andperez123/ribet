@@ -114,6 +114,10 @@ def get_job_mapping(
 
 class MappingConfirmRequest(BaseModel):
     column_map: dict[str, str] = Field(default_factory=dict)
+    amount_strategy: str | None = None
+    mapping_answers: dict[str, str] = Field(default_factory=dict)
+    row_meaning: str | None = None
+    apply_schema_memory: bool | None = None
 
 
 @router.post("/jobs/{job_id}/mapping/confirm", response_model=UploadJob)
@@ -130,7 +134,16 @@ def confirm_mapping(
     if job.status != "needs_review":
         raise HTTPException(status_code=400, detail="Job is not awaiting mapping review")
     try:
-        job = confirm_job_mapping(db, org, job, column_map=body.column_map or None)
+        job = confirm_job_mapping(
+            db,
+            org,
+            job,
+            column_map=body.column_map or None,
+            amount_strategy=body.amount_strategy,
+            mapping_answers=body.mapping_answers or None,
+            row_meaning=body.row_meaning,
+            apply_schema_memory=body.apply_schema_memory,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return _job_to_schema(job)

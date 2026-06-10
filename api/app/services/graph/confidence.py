@@ -10,6 +10,7 @@ CONFIDENCE_WEIGHTS: dict[str, int] = {
     "ar_aging": 15,
     "ap_aging": 15,
     "gl_detail": 10,
+    "gl_trial_balance": 10,
     "inventory": 15,
     "invoice_detail": 10,
     "sales_orders": 15,

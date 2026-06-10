@@ -151,6 +151,7 @@ def _report_scoping(db: Session, report: OperationalReport) -> tuple[list, set[s
             "ar_aging": "ar",
             "ap_aging": "ap",
             "gl_detail": "gl",
+            "gl_trial_balance": "gl",
             "inventory": "inventory",
         }.get(trigger_job.report_type)
     return job_ids or None, domains, primary_domain

@@ -19,6 +19,7 @@ const REPORT_TYPE_LABELS: Record<string, string> = {
   ar_aging: "AR Aging",
   ap_aging: "AP Aging",
   gl_detail: "GL Detail",
+  gl_trial_balance: "GL Trial Balance",
   inventory: "Inventory",
 };
 

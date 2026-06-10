@@ -16,6 +16,7 @@ REPORT_TYPE_TO_SECTOR: dict[str, str] = {
     "ar_aging": "financials",
     "ap_aging": "financials",
     "gl_detail": "financials",
+    "gl_trial_balance": "financials",
     "inventory": "manufacturing",
     "purchase_orders": "orders",
     "sales_orders": "sales",

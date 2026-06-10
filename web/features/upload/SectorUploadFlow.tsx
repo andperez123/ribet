@@ -21,7 +21,7 @@ import {
   type SectorId,
 } from "@/lib/sectors";
 import type { UploadSector } from "@/lib/types/upload";
-import { MappingReviewPanel } from "./MappingReviewPanel";
+import { DataReviewPanel } from "./DataReviewPanel";
 import { PipelineProgressBar } from "./PipelineProgressBar";
 import { UploadJobErrorPanel } from "./UploadJobErrorPanel";
 import { useJobPolling } from "./useJobPolling";
@@ -243,7 +243,7 @@ export function SectorUploadFlow() {
           {files
             .filter((f) => f.status === "needs_review")
             .map((f) => (
-              <MappingReviewPanel
+              <DataReviewPanel
                 key={f.id}
                 jobId={f.id}
                 fileName={f.name}

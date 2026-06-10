@@ -31,8 +31,12 @@ COLUMN_ALIASES: dict[str, list[str]] = {
     "days_overdue": ["days overdue", "days past due", "age days", "overdue days"],
     "aging_bucket": ["aging bucket", "bucket", "aging", "age category"],
     "account_id": ["account", "account id", "gl account", "acct", "account no", "account number"],
-    "account_name": ["account name", "description", "account description"],
+    "account_name": ["account name", "description", "account description", "acct_desc", "acct desc"],
     "posted_at": ["date", "posting date", "posted", "transaction date", "trans date"],
+    "beginning_balance": ["beg_bal", "beg bal", "beginning balance", "begin balance", "opening balance"],
+    "ending_balance": ["end_bal", "end bal", "ending balance", "close balance", "closing balance"],
+    "debits": ["debits", "debit", "period debits"],
+    "credits": ["credits", "credit", "period credits"],
     "sku": ["sku", "part number", "part no", "item", "item number", "part#"],
     "item_id": ["item id", "item no", "inventory id", "part id"],
     "quantity": ["quantity", "qty", "on hand", "onhand", "qty on hand"],
@@ -210,30 +214,43 @@ def detect_aging_bucket_columns(columns: list[str]) -> list[tuple[str, int]]:
 
 def normalize_columns(columns: list[str]) -> dict[str, str]:
     """Map original column names to canonical field names using scored matching."""
+    return {col: canonical for col, canonical, _ in get_detailed_column_mappings(columns)}
+
+
+def get_detailed_column_mappings(columns: list[str]) -> list[tuple[str, str, float, str]]:
+    """Return (source_col, canonical_field, score, reason) for each mapped column."""
     if not columns:
-        return {}
+        return []
 
     bucket_cols = {c for c, _ in detect_aging_bucket_columns([str(c) for c in columns])}
 
-    scores: list[tuple[float, str, str]] = []
+    scores: list[tuple[float, str, str, str]] = []
     for col in columns:
         if str(col) in bucket_cols:
             continue
+        col_str = str(col)
+        best_score = 0.0
+        best_canonical = ""
+        best_reason = ""
         for canonical, aliases in COLUMN_ALIASES.items():
-            score = _score_column(str(col), canonical, aliases)
-            if score >= 0.5:
-                scores.append((score, col, canonical))
+            score = _score_column(col_str, canonical, aliases)
+            if score > best_score:
+                best_score = score
+                best_canonical = canonical
+                best_reason = f"header alias match: '{col_str}' → {canonical} (score {score:.2f})"
+        if best_score >= 0.5:
+            scores.append((best_score, col_str, best_canonical, best_reason))
 
     scores.sort(key=lambda x: x[0], reverse=True)
 
-    mapping: dict[str, str] = {}
+    mapping: list[tuple[str, str, float, str]] = []
     used_cols: set[str] = set()
     used_canonical: set[str] = set()
 
-    for score, col, canonical in scores:
+    for score, col, canonical, reason in scores:
         if col in used_cols or canonical in used_canonical:
             continue
-        mapping[col] = canonical
+        mapping.append((col, canonical, score, reason))
         used_cols.add(col)
         used_canonical.add(canonical)
 

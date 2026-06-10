@@ -33,6 +33,22 @@ class CanonicalGLTransaction(BaseModel):
     posted_at: str | None = None
 
 
+class CanonicalGLTrialBalanceRow(BaseModel):
+    account_id: str
+    account_name: str | None = None
+    beginning_balance: Decimal = Decimal("0")
+    debits: Decimal = Decimal("0")
+    credits: Decimal = Decimal("0")
+    ending_balance: Decimal = Decimal("0")
+    net_activity: Decimal = Decimal("0")
+    analysis_amount: Decimal = Decimal("0")
+
+
+class RejectedRow(BaseModel):
+    row_index: int
+    reason: str
+
+
 class CanonicalInventoryItem(BaseModel):
     item_id: str
     sku: str
@@ -76,9 +92,14 @@ class CanonicalDataset(BaseModel):
     ar: list[CanonicalARRecord] = Field(default_factory=list)
     ap: list[CanonicalAPRecord] = Field(default_factory=list)
     gl: list[CanonicalGLTransaction] = Field(default_factory=list)
+    gl_trial_balance: list[CanonicalGLTrialBalanceRow] = Field(default_factory=list)
     inventory: list[CanonicalInventoryItem] = Field(default_factory=list)
     purchase_orders: list[CanonicalPurchaseOrder] = Field(default_factory=list)
     sales_orders: list[CanonicalSalesOrder] = Field(default_factory=list)
+    normalized_rows: int = 0
+    rejected_rows: list[RejectedRow] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    coverage_score: float = 0.0
 
 
 class OperationalSnapshotData(BaseModel):

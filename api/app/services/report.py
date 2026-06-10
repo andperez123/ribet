@@ -170,6 +170,7 @@ def generate_report(
             "ar_aging": "ar",
             "ap_aging": "ap",
             "gl_detail": "gl",
+            "gl_trial_balance": "gl",
             "inventory": "inventory",
             "purchase_orders": "orders",
             "sales_orders": "sales",

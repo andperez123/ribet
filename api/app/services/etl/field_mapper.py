@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from app.services.etl.aliases import (
     detect_aging_bucket_columns,
-    normalize_columns,
+    get_detailed_column_mappings,
 )
 from app.services.etl.profiler import ColumnProfile
 
@@ -15,6 +15,8 @@ _SUMMARY_ROW_PATTERNS = re.compile(
     r"^(?:total\s+open|grand\s+total|total|subtotal|summary)(?:\s*\([^)]*\))?$",
     re.I,
 )
+
+CONFIDENCE_CONFIRM_THRESHOLD = 0.75
 
 
 def _looks_like_numeric_entity(value: str) -> bool:
@@ -52,6 +54,7 @@ class FieldMapping:
     confidence: float
     strategy: str = "single_column"
     sources: list[str] = field(default_factory=list)
+    reason: str = ""
 
     def to_dict(self) -> dict:
         d: dict = {"confidence": round(self.confidence, 3), "strategy": self.strategy}
@@ -59,6 +62,8 @@ class FieldMapping:
             d["source"] = self.source
         if self.sources:
             d["sources"] = self.sources
+        if self.reason:
+            d["reason"] = self.reason
         return d
 
 
@@ -75,7 +80,7 @@ class MappingPlan:
 
     def to_dict(self) -> dict:
         source_columns = sorted(
-            set(self.column_map.values()) | set(self.unmapped_columns)
+            set(self.column_map.keys()) | set(self.unmapped_columns)
         )
         return {
             "report_type": self.report_type,
@@ -94,10 +99,21 @@ _REQUIRED_FIELDS: dict[str, list[str]] = {
     "ar_aging": ["customer_name"],
     "ap_aging": ["vendor_name"],
     "gl_detail": ["account_id", "amount"],
+    "gl_trial_balance": ["account_id"],
     "inventory": ["sku"],
     "purchase_orders": ["po_id", "vendor_name"],
     "sales_orders": ["order_id", "customer_name"],
 }
+
+
+def _is_tbal_layout(columns: list[str]) -> bool:
+    cols_lower = " ".join(str(c).lower() for c in columns)
+    has_account = "account" in cols_lower or "acct" in cols_lower
+    has_debit = "debit" in cols_lower
+    has_credit = "credit" in cols_lower
+    has_beg = "beg" in cols_lower and "bal" in cols_lower
+    has_end = "end" in cols_lower and "bal" in cols_lower
+    return has_account and has_debit and has_credit and has_beg and has_end
 
 
 def propose_mapping(
@@ -105,7 +121,8 @@ def propose_mapping(
     report_type: str,
     columns: list[str],
 ) -> MappingPlan:
-    col_map = normalize_columns(columns)
+    detailed = get_detailed_column_mappings(columns)
+    col_map = {col: canonical for col, canonical, _, _ in detailed}
     bucket_cols = detect_aging_bucket_columns(columns)
     bucket_names = [c for c, _ in bucket_cols]
 
@@ -113,11 +130,15 @@ def propose_mapping(
     field_mapping: dict[str, FieldMapping] = {}
     warnings: list[str] = []
 
+    reason_by_col = {col: reason for col, _, _, reason in detailed}
+
     for orig, canonical in col_map.items():
-        score = 0.85
+        score = next((s for c, cn, s, _ in detailed if c == orig and cn == canonical), 0.85)
+        reason = reason_by_col.get(orig, f"mapped {orig} → {canonical}")
         prof = profile_by_name.get(orig)
         if prof and canonical == "amount" and not prof.looks_numeric and not prof.looks_currency:
             score = 0.4
+            reason += "; column does not look numeric"
         if prof and canonical in ("customer_name", "vendor_name"):
             if prof.looks_currency:
                 score = 0.1
@@ -125,23 +146,58 @@ def propose_mapping(
                 entity_score, entity_warnings = _entity_column_confidence(prof)
                 score = min(score, entity_score)
                 warnings.extend(entity_warnings)
-        field_mapping[canonical] = FieldMapping(source=orig, confidence=score)
+        field_mapping[canonical] = FieldMapping(
+            source=orig, confidence=score, reason=reason
+        )
 
     amount_strategy = "single_column"
+
+    if report_type in ("gl_trial_balance",) or (
+        report_type in ("gl_detail", "unknown") and _is_tbal_layout(columns)
+    ):
+        report_type = "gl_trial_balance"
+        has_amount = "amount" in field_mapping and field_mapping["amount"].confidence >= 0.5
+        if not has_amount:
+            amount_strategy = "needs_user_choice"
+            warnings.append("Trial balance layout detected — choose how to interpret amount")
+        tbal_fields = [
+            "account_id",
+            "account_name",
+            "beginning_balance",
+            "ending_balance",
+            "debits",
+            "credits",
+        ]
+        for tf in tbal_fields:
+            if tf not in field_mapping:
+                for col, canonical, score, reason in detailed:
+                    if canonical == tf:
+                        field_mapping[tf] = FieldMapping(source=col, confidence=score, reason=reason)
+                        break
+
     if report_type in ("ar_aging", "ap_aging"):
         has_amount = "amount" in field_mapping and field_mapping["amount"].confidence >= 0.5
-        if bucket_names and (not has_amount or field_mapping.get("amount", FieldMapping(None, 0)).confidence < 0.6):
+        if bucket_names and (
+            not has_amount or field_mapping.get("amount", FieldMapping(None, 0)).confidence < 0.6
+        ):
             amount_strategy = "sum_buckets"
             field_mapping["amount"] = FieldMapping(
                 source=None,
                 confidence=0.88 if len(bucket_names) >= 2 else 0.6,
                 strategy="sum_buckets",
                 sources=bucket_names,
+                reason="sum aging bucket columns",
             )
         elif has_amount and bucket_names:
             amount_strategy = "single_column"
 
-    entity_field = "customer_name" if report_type == "ar_aging" else "vendor_name" if report_type == "ap_aging" else None
+    entity_field = (
+        "customer_name"
+        if report_type == "ar_aging"
+        else "vendor_name"
+        if report_type == "ap_aging"
+        else None
+    )
     if amount_strategy == "sum_buckets" and entity_field and entity_field not in field_mapping:
         warnings.append(f"missing required field: {entity_field}")
         field_mapping[entity_field] = FieldMapping(source=None, confidence=0.3)
@@ -169,6 +225,11 @@ def propose_mapping(
         else:
             confidences.append(0.2)
             warnings.append("no amount column or bucket columns detected")
+
+    if report_type == "gl_trial_balance":
+        confidences.append(0.85 if "account_id" in field_mapping else 0.3)
+        if amount_strategy == "needs_user_choice":
+            confidences.append(0.3)
 
     overall = sum(confidences) / len(confidences) if confidences else 0.5
     if report_type == "unknown":

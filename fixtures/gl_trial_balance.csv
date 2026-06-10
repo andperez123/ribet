@@ -1,0 +1,4 @@
+ACCOUNT,ACCT_DESC,DEBITS,CREDITS,BEG_BAL,END_BAL
+1000-00        ,Cash - Inland Operating Accoun,0,0,-626.95,-626.95
+1000-02        ,Cash - Wintrust Operating Acco,1155977.5,-1735437.21,4159081.79,3579622.08
+1100-00        ,Accounts Receivable           ,2078621.61,-1193298.38,-135235.94,750087.29
