@@ -459,6 +459,59 @@ def generate_report(
     return report
 
 
+def regenerate_org_report(db: Session, org_id: UUID) -> OperationalReport:
+    """Rebuild an operational report from all successful uploads for the org."""
+    from app.services.gaps import sync_data_gaps
+    from app.services.progress import recompute_org_progress
+    from app.services.rules.runner import RuleFinding
+
+    done_jobs = (
+        db.query(IngestJob)
+        .filter(IngestJob.org_id == org_id, IngestJob.status == "done")
+        .order_by(IngestJob.created_at.desc())
+        .all()
+    )
+    if not done_jobs:
+        raise ValueError("No successful uploads to build a report from")
+
+    job_ids = [j.id for j in done_jobs]
+    trigger = done_jobs[0]
+    period = trigger.detected_period
+
+    report = generate_report(db, org_id, job_ids, period=period)
+
+    for job in done_jobs:
+        job.report_id = report.id
+
+    coverage = get_graph_coverage(db, org_id)
+    from app.models import OperationalFinding
+
+    db_findings = (
+        db.query(OperationalFinding)
+        .filter(OperationalFinding.report_id == report.id)
+        .all()
+    )
+    rule_findings = [
+        RuleFinding(
+            finding_type=f.finding_type,
+            title=f.title,
+            detail=f.detail,
+            severity=f.severity,
+            confidence=f.confidence,
+            business_impact=f.business_impact,
+            department=f.department,
+            category=f.category,
+            suggested_action=f.suggested_action or "",
+        )
+        for f in db_findings
+    ]
+    sync_data_gaps(db, org_id, coverage, rule_findings)
+    recompute_org_progress(db, org_id)
+    db.commit()
+    db.refresh(report)
+    return report
+
+
 def delete_report(db: Session, org_id: UUID, report_id: UUID) -> bool:
     """Delete a report and its dependent rows. Returns False if not found."""
     from sqlalchemy import delete, update

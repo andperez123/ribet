@@ -125,3 +125,44 @@ def test_orders_sector_enabled_for_unmapped_export():
         )
     finally:
         db.close()
+
+
+def test_regenerate_report_requires_done_jobs(client):
+    from app.database import SessionLocal
+
+    _ensure_org(SessionLocal())
+    r = client.post("/v1/reports/regenerate", headers=HEADERS)
+    assert r.status_code == 400
+    assert "No successful uploads" in r.json()["detail"]
+
+
+def test_regenerate_report_after_upload(client):
+    from app.database import SessionLocal
+
+    _ensure_org(SessionLocal())
+    content = (FIXTURES / "ar_aging_jobboss.csv").read_bytes()
+    files = {"files": ("ar_aging_jobboss.csv", io.BytesIO(content), "text/csv")}
+    data = {"sector": "financials", "consent_acknowledged": "true"}
+
+    up = client.post("/v1/ingest/uploads", headers=HEADERS, files=files, data=data)
+    assert up.status_code == 200
+    from uuid import UUID
+
+    job_id = UUID(up.json()["jobs"][0]["id"])
+
+    db = SessionLocal()
+    try:
+        job = db.get(IngestJob, job_id)
+        process_job(db, job)
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.post("/v1/reports/regenerate", headers=HEADERS)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"]
+    assert body["health_score"] is not None
+
+    latest = client.get("/v1/reports/latest", headers=HEADERS)
+    assert latest.status_code == 200

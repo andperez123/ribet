@@ -1,10 +1,7 @@
 import Link from "next/link";
-import { Fragment } from "react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { UploadJobErrorPanel } from "@/features/upload/UploadJobErrorPanel";
 import { formatDate } from "@/lib/dashboard/utils";
-import { firstJobError } from "@/lib/upload/job-errors";
 import type { IngestJobRecord } from "@/lib/types/report";
 
 function statusVariant(status: string) {
@@ -14,7 +11,17 @@ function statusVariant(status: string) {
   return "muted" as const;
 }
 
-export function UploadsTable({ jobs }: { jobs: IngestJobRecord[] }) {
+export function UploadsTable({
+  jobs,
+  limit,
+  showViewAll = false,
+}: {
+  jobs: IngestJobRecord[];
+  limit?: number;
+  showViewAll?: boolean;
+}) {
+  const displayJobs = limit ? jobs.slice(0, limit) : jobs;
+
   if (!jobs.length) {
     return (
       <Card>
@@ -25,8 +32,16 @@ export function UploadsTable({ jobs }: { jobs: IngestJobRecord[] }) {
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="border-b border-ribet-border px-6 py-4">
+      <div className="flex items-center justify-between border-b border-ribet-border px-6 py-4">
         <h2 className="text-sm font-semibold text-ribet-text">Recent uploads</h2>
+        {showViewAll && jobs.length > (limit ?? jobs.length) && (
+          <Link
+            href="/dashboard/upload"
+            className="text-xs font-medium text-ribet-green hover:underline"
+          >
+            View all →
+          </Link>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
@@ -40,58 +55,44 @@ export function UploadsTable({ jobs }: { jobs: IngestJobRecord[] }) {
             </tr>
           </thead>
           <tbody>
-            {jobs.map((job) => {
-              const err = firstJobError(job.errors);
-              return (
-                <Fragment key={job.id}>
-                  <tr className="border-b border-ribet-border/60 last:border-0">
-                    <td className="px-6 py-3 font-medium text-ribet-text">
-                      {job.file_name}
-                    </td>
-                    <td className="px-6 py-3 capitalize text-ribet-muted">
-                      {job.sector ?? "—"}
-                    </td>
-                    <td className="px-6 py-3">
-                      <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
-                    </td>
-                    <td className="px-6 py-3 text-ribet-muted">
-                      {formatDate(job.created_at)}
-                    </td>
-                    <td className="px-6 py-3">
-                      {job.report_id ? (
-                        <Link
-                          href={`/dashboard/reports/${job.report_id}`}
-                          className="font-medium text-ribet-green hover:underline"
-                        >
-                          View
-                        </Link>
-                      ) : job.status === "error" ? (
-                        <Link
-                          href="/dashboard/upload"
-                          className="font-medium text-ribet-green hover:underline"
-                        >
-                          Re-upload
-                        </Link>
-                      ) : (
-                        <span className="text-ribet-muted">—</span>
-                      )}
-                    </td>
-                  </tr>
-                  {job.status === "error" && err && (
-                    <tr className="border-b border-ribet-border/60">
-                      <td colSpan={5} className="px-6 pb-4 pt-0">
-                        <UploadJobErrorPanel
-                          jobId={job.id}
-                          error={err}
-                          intakeMetadata={job.intake_metadata}
-                          compact
-                        />
-                      </td>
-                    </tr>
+            {displayJobs.map((job) => (
+              <tr
+                key={job.id}
+                className="border-b border-ribet-border/60 last:border-0"
+              >
+                <td className="max-w-[200px] truncate px-6 py-3 font-medium text-ribet-text">
+                  {job.file_name}
+                </td>
+                <td className="px-6 py-3 capitalize text-ribet-muted">
+                  {job.sector ?? "—"}
+                </td>
+                <td className="px-6 py-3">
+                  <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
+                </td>
+                <td className="px-6 py-3 text-ribet-muted">
+                  {formatDate(job.created_at)}
+                </td>
+                <td className="px-6 py-3">
+                  {job.report_id ? (
+                    <Link
+                      href={`/dashboard/reports/${job.report_id}`}
+                      className="font-medium text-ribet-green hover:underline"
+                    >
+                      View
+                    </Link>
+                  ) : job.status === "error" ? (
+                    <Link
+                      href="/dashboard/upload"
+                      className="font-medium text-ribet-green hover:underline"
+                    >
+                      Re-upload
+                    </Link>
+                  ) : (
+                    <span className="text-ribet-muted">—</span>
                   )}
-                </Fragment>
-              );
-            })}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

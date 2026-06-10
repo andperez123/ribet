@@ -11,7 +11,7 @@ from app.deps import get_organization, verify_api_key
 from app.models import OperationalFinding, OperationalReport, Organization
 from app.schemas import FindingOut, OperationalReportOut, ReportSummary, ReportsListResponse
 from app.services.pdf_export import render_report_pdf
-from app.services.report import delete_report
+from app.services.report import delete_report, regenerate_org_report
 from app.services.report_insights import hydrate_report_insights, serialize_insights_for_api
 from app.services.evidence_pack import get_evidence_pack_for_report
 from app.services.ai_analyst.runner import get_analyst_output_for_report
@@ -126,6 +126,19 @@ def get_report(
     report = db.get(OperationalReport, report_id)
     if not report or report.org_id != org.id:
         raise HTTPException(status_code=404, detail="Report not found")
+    return _report_to_out(db, report)
+
+
+@router.post("/reports/regenerate", response_model=OperationalReportOut)
+def regenerate_report(
+    org: Organization = Depends(get_organization),
+    db: Session = Depends(get_db),
+    _: None = Depends(verify_api_key),
+):
+    try:
+        report = regenerate_org_report(db, org.id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return _report_to_out(db, report)
 
 

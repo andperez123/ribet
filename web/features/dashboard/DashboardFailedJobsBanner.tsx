@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { UploadJobErrorPanel } from "@/features/upload/UploadJobErrorPanel";
-import { firstJobError } from "@/lib/upload/job-errors";
+import { AlertCircle } from "lucide-react";
 import type { IngestJobRecord } from "@/lib/types/report";
 
 export function DashboardFailedJobsBanner({
@@ -11,40 +10,37 @@ export function DashboardFailedJobsBanner({
   const failed = jobs.filter((j) => j.status === "error");
   if (!failed.length) return null;
 
+  const succeeded = jobs.filter((j) => j.status === "done").length;
+
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-semibold text-ribet-text">
-            Upload{failed.length > 1 ? "s" : ""} need attention
-          </h2>
-          <p className="mt-1 text-sm text-ribet-muted">
-            One or more files could not be processed. Fix the export and re-upload,
-            or try CSV if Excel is failing.
-          </p>
-        </div>
-        <Link
-          href="/dashboard/upload"
-          className="text-sm font-medium text-ribet-green hover:underline"
-        >
-          Upload again →
-        </Link>
+    <div
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-ribet-risk/25 bg-ribet-risk/5 px-4 py-3"
+      role="alert"
+    >
+      <div className="flex min-w-0 items-center gap-2.5">
+        <AlertCircle className="h-4 w-4 shrink-0 text-ribet-risk" />
+        <p className="text-sm text-ribet-text">
+          <span className="font-semibold">
+            {failed.length} upload{failed.length > 1 ? "s" : ""} failed
+          </span>
+          {succeeded > 0 && (
+            <span className="text-ribet-muted">
+              {" "}
+              · {succeeded} succeeded
+            </span>
+          )}
+          <span className="text-ribet-muted">
+            {" "}
+            — fix exports and re-upload, or try CSV if Excel is failing.
+          </span>
+        </p>
       </div>
-      <div className="space-y-2">
-        {failed.slice(0, 5).map((job) => {
-          const err = firstJobError(job.errors);
-          if (!err) return null;
-          return (
-            <UploadJobErrorPanel
-              key={job.id}
-              jobId={job.id}
-              fileName={job.file_name}
-              error={err}
-              intakeMetadata={job.intake_metadata}
-            />
-          );
-        })}
-      </div>
-    </section>
+      <Link
+        href="/dashboard/upload"
+        className="shrink-0 text-sm font-medium text-ribet-green hover:underline"
+      >
+        Manage uploads →
+      </Link>
+    </div>
   );
 }
