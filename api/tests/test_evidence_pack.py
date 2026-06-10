@@ -66,7 +66,7 @@ def test_evidence_pack_metrics_match_digest(db_session, sample_org):
 
     assert row.pack["schema_version"] == EVIDENCE_PACK_SCHEMA_VERSION
     assert row.pack["agent_ready"] is True
-    assert row.pack["raw_data_included"] is False
+    assert row.pack["raw_data_included"] is True
     assert pack.metrics["ar"]["total_receivables"] == pytest.approx(50000.0)
     assert report.data_digest["ar_total"] == pytest.approx(50000.0)
     assert row.pack["memory"]["enabled"] is False

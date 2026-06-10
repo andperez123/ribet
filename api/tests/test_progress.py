@@ -95,7 +95,8 @@ def test_active_sectors_unlock_core_capabilities():
         db.close()
 
 
-def test_orders_sector_fails_as_coming_soon():
+def test_orders_sector_enabled_for_unmapped_export():
+    """Orders sector is live — unmapped columns go to mapping review, not sector_disabled."""
     from app.database import SessionLocal
 
     db = SessionLocal()
@@ -117,11 +118,10 @@ def test_orders_sector_fails_as_coming_soon():
 
         process_job(db, job)
         db.refresh(job)
-        assert job.status == "error"
-        assert job.errors
-        err = job.errors[0]
-        assert isinstance(err, dict)
-        assert err.get("code") == "sector_disabled"
-        assert "not available" in err.get("message", "").lower()
+        assert job.status == "needs_review"
+        assert not any(
+            isinstance(err, dict) and err.get("code") == "sector_disabled"
+            for err in (job.errors or [])
+        )
     finally:
         db.close()
