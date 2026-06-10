@@ -11,7 +11,7 @@ export default function UploadPage() {
           Add ERP exports to refresh your operational health report.
         </p>
       </div>
-      <SectorUploadFlow variant="in-app" />
+      <SectorUploadFlow />
     </div>
   );
 }
