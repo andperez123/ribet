@@ -25,12 +25,12 @@ class ColumnProfile:
     def to_dict(self) -> dict:
         return {
             "name": self.name,
-            "dtype": self.dtype,
-            "null_rate": round(self.null_rate, 3),
-            "uniqueness_ratio": round(self.uniqueness_ratio, 3),
-            "looks_currency": self.looks_currency,
-            "looks_date": self.looks_date,
-            "looks_numeric": self.looks_numeric,
+            "dtype": str(self.dtype),
+            "null_rate": round(float(self.null_rate), 3),
+            "uniqueness_ratio": round(float(self.uniqueness_ratio), 3),
+            "looks_currency": bool(self.looks_currency),
+            "looks_date": bool(self.looks_date),
+            "looks_numeric": bool(self.looks_numeric),
             "sample_values": self.sample_values,
         }
 
@@ -98,8 +98,8 @@ class DataProfile:
             "detected_date_columns": self.detected_date_columns,
             "detected_money_columns": self.detected_money_columns,
             "detected_id_columns": self.detected_id_columns,
-            "null_rates": {k: round(v, 3) for k, v in self.null_rates.items()},
-            "duplicate_rates": {k: round(v, 3) for k, v in self.duplicate_rates.items()},
+            "null_rates": {k: round(float(v), 3) for k, v in self.null_rates.items()},
+            "duplicate_rates": {k: round(float(v), 3) for k, v in self.duplicate_rates.items()},
         }
 
 
@@ -160,9 +160,9 @@ def profile_dataframe(df: pd.DataFrame, max_samples: int = 5) -> list[ColumnProf
                 dtype=str(series.dtype),
                 null_rate=float(series.isna().mean()),
                 uniqueness_ratio=float(uniq),
-                looks_currency=_looks_currency(series),
-                looks_date=_looks_date(series),
-                looks_numeric=_looks_numeric(series),
+                looks_currency=bool(_looks_currency(series)),
+                looks_date=bool(_looks_date(series)),
+                looks_numeric=bool(_looks_numeric(series)),
                 sample_values=samples,
             )
         )

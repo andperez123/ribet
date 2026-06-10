@@ -134,6 +134,14 @@ def test_schema_memory_none_for_other_org(db):
     assert other_match.match == "none"
 
 
+def test_tbal_metadata_is_json_serializable():
+    import json
+
+    df = pd.read_csv(FIXTURES / "gl_trial_balance.csv")
+    result = interpret_upload(df, "V_BI_GL_TBAL.csv")
+    json.dumps(result.to_metadata())
+
+
 def test_acct_desc_maps_to_account_name():
     df = pd.read_csv(FIXTURES / "gl_trial_balance.csv")
     profiles = profile_upload(df, "gl_trial_balance.csv").column_profiles
