@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0010_org_mapping_memory"
-down_revision = "0009"
+down_revision = "0009_pipeline_stage"
 branch_labels = None
 depends_on = None
 
