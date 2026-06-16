@@ -10,6 +10,7 @@ export function RadialGauge({
   label,
   sublabel,
   invert = false,
+  tone = "light",
 }: {
   value: number;
   max?: number;
@@ -17,13 +18,19 @@ export function RadialGauge({
   label?: string;
   sublabel?: string;
   invert?: boolean;
+  /** "dark" renders light text for use on dark/hero backgrounds. */
+  tone?: "light" | "dark";
 }) {
   const pct = Math.min(100, Math.max(0, (value / max) * 100));
   const display = invert ? max - value : value;
   const color = scoreColor(invert ? 100 - pct : pct);
+  const trackColor = tone === "dark" ? "rgba(255,255,255,0.16)" : CHART_COLORS.border;
+  const valueClass = tone === "dark" ? "text-white" : "text-ribet-text";
+  const labelClass = tone === "dark" ? "text-white/70" : "text-ribet-muted";
+  const sublabelClass = tone === "dark" ? "text-white/55" : "text-ribet-muted";
   const data = [
     { value: pct, fill: color },
-    { value: 100 - pct, fill: CHART_COLORS.border },
+    { value: 100 - pct, fill: trackColor },
   ];
 
   return (
@@ -50,16 +57,16 @@ export function RadialGauge({
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="text-3xl font-semibold tabular-nums text-ribet-text">
+        <span className={`text-3xl font-semibold tabular-nums ${valueClass}`}>
           {Math.round(display)}
         </span>
         {label && (
-          <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-ribet-muted">
+          <span className={`mt-0.5 text-[10px] font-medium uppercase tracking-wide ${labelClass}`}>
             {label}
           </span>
         )}
         {sublabel && (
-          <span className="text-[10px] text-ribet-muted">{sublabel}</span>
+          <span className={`text-[10px] ${sublabelClass}`}>{sublabel}</span>
         )}
       </div>
     </div>

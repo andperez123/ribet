@@ -16,21 +16,33 @@ type ChatResponse = {
 
 type Props = {
   reportId?: string;
+  title?: string;
+  subtitle?: string;
+  placeholder?: string;
+  suggestions?: string[];
 };
 
-export function OperationsChatPanel({ reportId }: Props) {
+const DEFAULT_SUGGESTIONS = [
+  "Who should we call on collections this week?",
+  "Which vendors are driving AP risk?",
+  "What should we upload next to improve analysis?",
+];
+
+export function OperationsChatPanel({
+  reportId,
+  title = "Ask your operations manager",
+  subtitle = "Questions are answered from your verified report data — not generic advice.",
+  placeholder = "e.g. Why is cash flow at risk this month?",
+  suggestions: suggestionsProp,
+}: Props) {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const suggestions = useMemo(
-    () => [
-      "Who should we call on collections this week?",
-      "Which vendors are driving AP risk?",
-      "What should we upload next to improve analysis?",
-    ],
-    []
+    () => suggestionsProp ?? DEFAULT_SUGGESTIONS,
+    [suggestionsProp]
   );
 
   const ask = useCallback(
@@ -61,10 +73,8 @@ export function OperationsChatPanel({ reportId }: Props) {
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-ribet-text">Ask your operations manager</h2>
-      <p className="mt-1 text-sm text-ribet-muted">
-        Questions are answered from your verified report data — not generic advice.
-      </p>
+      <h2 className="text-lg font-semibold text-ribet-text">{title}</h2>
+      <p className="mt-1 text-sm text-ribet-muted">{subtitle}</p>
 
       {messages.length > 0 && (
         <div className="mt-4 max-h-80 space-y-3 overflow-y-auto rounded-xl border border-ribet-border bg-ribet-bg/40 p-4">
@@ -115,7 +125,7 @@ export function OperationsChatPanel({ reportId }: Props) {
           type="text"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder="e.g. Why is cash flow at risk this month?"
+          placeholder={placeholder}
           className="min-w-0 flex-1 rounded-xl border border-ribet-border bg-ribet-bg px-4 py-2.5 text-sm text-ribet-text placeholder:text-ribet-muted"
           aria-label="Ask a question about your operational data"
         />

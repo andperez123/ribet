@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/Card";
-import { formatCurrency } from "@/lib/dashboard/utils";
+import { formatCurrency, formatCurrencyCompact } from "@/lib/dashboard/utils";
 import type { DataCoverage, DataDigest } from "@/lib/types/report";
 
 type KpiItem = {
@@ -17,7 +17,7 @@ function buildKpis(digest: DataDigest, coverage: DataCoverage): KpiItem[] {
   if (coverage.ap) {
     apItems.push({
       label: "Open payables",
-      value: formatCurrency(digest.ap_total),
+      value: formatCurrencyCompact(digest.ap_total),
       sub: `${digest.vendor_count} vendor record(s)`,
     });
     if (digest.top_vendors[0]) {
@@ -31,13 +31,13 @@ function buildKpis(digest: DataDigest, coverage: DataCoverage): KpiItem[] {
       if (digest.ap_31_60 > 0) {
         apItems.push({
           label: "AP 31–60 days",
-          value: formatCurrency(digest.ap_31_60),
+          value: formatCurrencyCompact(digest.ap_31_60),
         });
       }
       if (digest.ap_91_plus > 0) {
         apItems.push({
           label: "AP 91+ days",
-          value: formatCurrency(digest.ap_91_plus),
+          value: formatCurrencyCompact(digest.ap_91_plus),
         });
       }
     }
@@ -47,7 +47,7 @@ function buildKpis(digest: DataDigest, coverage: DataCoverage): KpiItem[] {
   if (coverage.ar) {
     arItems.push({
       label: "Total receivables",
-      value: formatCurrency(digest.ar_total),
+      value: formatCurrencyCompact(digest.ar_total),
       sub: `${digest.ar_invoice_count} invoice(s)`,
     });
     arItems.push({
@@ -78,14 +78,14 @@ function buildKpis(digest: DataDigest, coverage: DataCoverage): KpiItem[] {
       value: digest.gl_txn_count.toLocaleString(),
       sub:
         digest.gl_adjustment_total > 0
-          ? `${formatCurrency(digest.gl_adjustment_total)} adjustments`
+          ? `${formatCurrencyCompact(digest.gl_adjustment_total)} adjustments`
           : undefined,
     });
   }
   if (coverage.purchase_orders) {
     otherItems.push({
       label: "Late POs",
-      value: formatCurrency(digest.po_late_total),
+      value: formatCurrencyCompact(digest.po_late_total),
       sub: `${digest.po_late_count} line(s) · ${digest.po_count} open`,
       variant: digest.po_late_total >= 10_000 ? "warning" : "default",
     });
@@ -93,7 +93,7 @@ function buildKpis(digest: DataDigest, coverage: DataCoverage): KpiItem[] {
   if (coverage.sales_orders) {
     otherItems.push({
       label: "Past-due SOs",
-      value: formatCurrency(digest.so_past_due_total),
+      value: formatCurrencyCompact(digest.so_past_due_total),
       sub: `${digest.so_past_due_count} line(s) · ${digest.so_count} open`,
       variant: digest.so_past_due_total >= 25_000 ? "warning" : "default",
     });
@@ -123,22 +123,26 @@ export function DataDigestKpiGrid({
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-semibold text-ribet-text">Key metrics</h2>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => (
           <Card
             key={item.label}
-            className={
+            className={`min-w-0 ${
               item.variant === "warning"
                 ? "border-amber-500/40 bg-amber-500/5"
-                : undefined
-            }
+                : ""
+            }`}
           >
-            <p className="text-sm text-ribet-muted">{item.label}</p>
-            <p className="mt-2 text-2xl font-semibold text-ribet-text">
+            <p className="truncate text-sm text-ribet-muted" title={item.label}>
+              {item.label}
+            </p>
+            <p className="mt-2 text-xl font-semibold leading-tight tabular-nums text-ribet-text sm:text-2xl">
               {item.value}
             </p>
             {item.sub && (
-              <p className="mt-1 text-xs text-ribet-muted">{item.sub}</p>
+              <p className="mt-1 truncate text-xs text-ribet-muted" title={item.sub}>
+                {item.sub}
+              </p>
             )}
           </Card>
         ))}

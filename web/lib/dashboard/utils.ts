@@ -143,3 +143,17 @@ export function formatCurrency(n: number): string {
     maximumFractionDigits: 0,
   }).format(n);
 }
+
+/**
+ * Compact currency for headline stat tiles (e.g. $1.1M, $968.2K) so large
+ * figures never overflow narrow cards. Small values stay precise.
+ */
+export function formatCurrencyCompact(n: number): string {
+  if (Math.abs(n) < 10_000) return formatCurrency(n);
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(n);
+}

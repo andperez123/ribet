@@ -1,6 +1,6 @@
-import { RadialGauge, Sparkline } from "@/components/charts";
+import { RadialGauge } from "@/components/charts";
 import { Card } from "@/components/ui/Card";
-import { formatCurrency } from "@/lib/dashboard/utils";
+import { formatCurrencyCompact } from "@/lib/dashboard/utils";
 import type { OrgCoverage } from "@/lib/types/coverage";
 import type {
   AnalystOutput,
@@ -28,7 +28,7 @@ function buildKpiTiles(
     tiles.push({
       key: "ar",
       label: "Open AR",
-      value: formatCurrency(digest.ar_total),
+      value: formatCurrencyCompact(digest.ar_total),
       sub:
         digest.ar_over_90_pct > 0
           ? `${digest.ar_over_90_pct.toFixed(0)}% over 90d`
@@ -39,7 +39,7 @@ function buildKpiTiles(
     tiles.push({
       key: "ap",
       label: "Open AP",
-      value: formatCurrency(digest.ap_total),
+      value: formatCurrencyCompact(digest.ap_total),
       sub:
         digest.ap_over_60_pct > 0
           ? `${digest.ap_over_60_pct.toFixed(0)}% over 60d`
@@ -72,7 +72,7 @@ function buildKpiTiles(
     tiles.push({
       key: "po",
       label: "Open POs",
-      value: formatCurrency(digest.po_open_total),
+      value: formatCurrencyCompact(digest.po_open_total),
       sub:
         digest.po_late_count > 0
           ? `${digest.po_late_count} late`
@@ -83,7 +83,7 @@ function buildKpiTiles(
     tiles.push({
       key: "so",
       label: "Open SOs",
-      value: formatCurrency(digest.so_open_total),
+      value: formatCurrencyCompact(digest.so_open_total),
       sub:
         digest.so_past_due_count > 0
           ? `${digest.so_past_due_count} past due`
@@ -113,7 +113,6 @@ export function StoryHero({
   orgCoverage,
   analystOutput,
   confidenceScore,
-  healthSparkline,
   compact = false,
 }: {
   report: OperationalReport;
@@ -122,6 +121,7 @@ export function StoryHero({
   orgCoverage?: OrgCoverage | null;
   analystOutput?: AnalystOutput | null;
   confidenceScore?: ConfidenceScore | null;
+  /** @deprecated retained for caller compatibility; no longer rendered per-tile. */
   healthSparkline?: number[];
   compact?: boolean;
 }) {
@@ -143,6 +143,7 @@ export function StoryHero({
             label="Health"
             sublabel={report.health_status}
             size={100}
+            tone="dark"
           />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium uppercase tracking-widest text-white/50">
@@ -167,6 +168,7 @@ export function StoryHero({
               label="Health"
               sublabel={report.health_status}
               size={148}
+              tone="dark"
             />
             <p className="mt-3 text-xs uppercase tracking-widest text-white/45">
               {period}
@@ -194,6 +196,7 @@ export function StoryHero({
                 value={confidence}
                 label="Confidence"
                 size={108}
+                tone="dark"
               />
               {delta !== undefined && delta !== 0 && (
                 <span
@@ -215,20 +218,17 @@ export function StoryHero({
       {kpis.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {kpis.map((kpi) => (
-            <Card key={kpi.key} variant="stat">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-ribet-muted">
+            <Card key={kpi.key} variant="stat" className="min-w-0">
+              <p className="truncate text-[10px] font-medium uppercase tracking-wide text-ribet-muted" title={kpi.label}>
                 {kpi.label}
               </p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-ribet-text">
+              <p className="mt-1 text-lg font-semibold leading-tight tabular-nums text-ribet-text">
                 {kpi.value}
               </p>
               {kpi.sub && (
-                <p className="mt-0.5 text-xs text-ribet-muted">{kpi.sub}</p>
-              )}
-              {healthSparkline && healthSparkline.length > 1 && (
-                <div className="mt-2 opacity-60">
-                  <Sparkline data={healthSparkline} />
-                </div>
+                <p className="mt-0.5 truncate text-xs text-ribet-muted" title={kpi.sub}>
+                  {kpi.sub}
+                </p>
               )}
             </Card>
           ))}
