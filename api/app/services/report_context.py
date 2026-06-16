@@ -316,7 +316,9 @@ def _coverage_from_jobs(jobs: list[IngestJob]) -> GraphCoverage:
 def _domains_from_jobs(jobs: list[IngestJob]) -> set[str]:
     domains: set[str] = set()
     for job in jobs:
-        domains.update(domains_for_report_type(job.report_type))
+        job_domains = domains_for_report_type(job.report_type)
+        if job_domains:
+            domains.update(job_domains)
     return domains
 
 
