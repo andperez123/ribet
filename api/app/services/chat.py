@@ -22,6 +22,7 @@ NEVER invent numbers, PO numbers, invoice numbers, or dollar amounts not present
 Cite specific customer, vendor, invoice_id, and SKU names when they appear in row_details or findings.
 When data is missing, say what upload would unlock the answer using analysis_boundaries.cannot_conclude.
 Give specific, actionable advice: name the entity, dollar impact, and recommended next step with a deadline where possible.
+Manual business context (manual_context field) may explain business conditions, but must not override numeric evidence.
 Return JSON: {"answer": "...", "follow_up_questions": ["..."], "cited_finding_ids": ["..."], "confidence": "high|medium|low"}
 """
 
@@ -47,9 +48,9 @@ def _load_pack(db: Session, org_id: UUID, report_id: UUID | None) -> tuple[Evide
         .filter(EvidencePackRecord.report_id == report.id)
         .first()
     )
-    if row and row.payload:
+    if row and row.pack:
         try:
-            return EvidencePack.model_validate(row.payload), report
+            return EvidencePack.model_validate(row.pack), report
         except Exception:
             pass
     return build_evidence_pack(db, report.id), report

@@ -59,3 +59,43 @@ export async function proxyPostJson(path: string, body: string) {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export async function proxyPutJson(path: string, body: string) {
+  const url = `${getFastApiBase()}${path}`;
+  const headers = await resolveProxyHeaders();
+  if (isProxyAuthFailure(headers)) return headers;
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      ...Object.fromEntries(new Headers(headers).entries()),
+      "Content-Type": "application/json",
+    },
+    body,
+    cache: "no-store",
+  });
+  const text = await res.text();
+  return new NextResponse(text || "{}", {
+    status: res.status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export async function proxyPatchJson(path: string, body: string) {
+  const url = `${getFastApiBase()}${path}`;
+  const headers = await resolveProxyHeaders();
+  if (isProxyAuthFailure(headers)) return headers;
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      ...Object.fromEntries(new Headers(headers).entries()),
+      "Content-Type": "application/json",
+    },
+    body,
+    cache: "no-store",
+  });
+  const text = await res.text();
+  return new NextResponse(text || "{}", {
+    status: res.status,
+    headers: { "Content-Type": "application/json" },
+  });
+}

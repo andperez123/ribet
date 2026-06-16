@@ -158,11 +158,32 @@ def generate_report(
     org_id: UUID,
     job_ids: list[UUID],
     period: str | None = None,
+    *,
+    domains: set[str] | None = None,
+    generation_context: "ReportGenerationContext | None" = None,
 ) -> OperationalReport:
+    from app.services.report_context import (
+        ReportGenerationContext,
+        generation_context_to_snapshot_dict,
+        link_included_jobs,
+        persist_source_jobs,
+    )
+
+    if generation_context is not None:
+        job_ids = list(generation_context.source_job_ids)
+        if generation_context.period_label:
+            period = generation_context.period_label
+        if generation_context.domains:
+            domains = set(generation_context.domains)
+
     job_id = job_ids[0] if job_ids else None
     period_label = period or datetime.now(timezone.utc).strftime("%Y-%m")
     trigger_job = db.get(IngestJob, job_id) if job_id else None
-    trigger_domains = domains_for_report_type(trigger_job.report_type if trigger_job else None)
+    trigger_domains = (
+        domains
+        if domains is not None
+        else domains_for_report_type(trigger_job.report_type if trigger_job else None)
+    )
     covered_domains = get_covered_domains(db, org_id)
     primary_domain = None
     if trigger_job and trigger_job.report_type:
@@ -196,6 +217,8 @@ def generate_report(
     org_name = org.name if org else "Organization"
 
     report = OperationalReport(org_id=org_id, job_ids=[str(j) for j in job_ids], period_label=period_label)
+    if generation_context is not None:
+        report.generation_context = generation_context_to_snapshot_dict(generation_context)
     db.add(report)
     db.flush()
 
@@ -440,6 +463,18 @@ def generate_report(
 
     db.commit()
     db.refresh(report)
+
+    if generation_context is not None and job_ids:
+        persist_source_jobs(
+            db,
+            report.id,
+            job_ids,
+            included_at=generation_context.submitted_at,
+        )
+        link_included_jobs(db, report.id, job_ids)
+        db.commit()
+        db.refresh(report)
+
     emit_event(
         db,
         "report_generated",
@@ -459,29 +494,41 @@ def generate_report(
     return report
 
 
-def regenerate_org_report(db: Session, org_id: UUID) -> OperationalReport:
-    """Rebuild an operational report from all successful uploads for the org."""
+def regenerate_org_report(
+    db: Session,
+    org_id: UUID,
+    *,
+    generation_context: "ReportGenerationContext | None" = None,
+) -> OperationalReport:
+    """Rebuild an operational report from selected or all successful uploads."""
     from app.services.gaps import sync_data_gaps
     from app.services.progress import recompute_org_progress
+    from app.services.report_context import ReportGenerationContext, resolve_generation_context
     from app.services.rules.runner import RuleFinding
 
-    done_jobs = (
-        db.query(IngestJob)
-        .filter(IngestJob.org_id == org_id, IngestJob.status == "done")
-        .order_by(IngestJob.created_at.desc())
-        .all()
-    )
-    if not done_jobs:
+    if generation_context is None:
+        generation_context = resolve_generation_context(db, org_id)
+
+    if generation_context.regenerate_mode == "ai_only":
+        return regenerate_ai_only_report(db, org_id, generation_context)
+
+    job_ids = generation_context.source_job_ids
+    jobs = [db.get(IngestJob, jid) for jid in job_ids]
+    jobs = [j for j in jobs if j is not None]
+    if not jobs:
         raise ValueError("No successful uploads to build a report from")
 
-    job_ids = [j.id for j in done_jobs]
-    trigger = done_jobs[0]
-    period = trigger.detected_period
+    period = generation_context.period_label
+    domain_set = set(generation_context.domains or []) or None
 
-    report = generate_report(db, org_id, job_ids, period=period)
-
-    for job in done_jobs:
-        job.report_id = report.id
+    report = generate_report(
+        db,
+        org_id,
+        job_ids,
+        period=period,
+        domains=domain_set,
+        generation_context=generation_context,
+    )
 
     coverage = get_graph_coverage(db, org_id)
     from app.models import OperationalFinding
@@ -512,6 +559,116 @@ def regenerate_org_report(db: Session, org_id: UUID) -> OperationalReport:
     return report
 
 
+def regenerate_ai_only_report(
+    db: Session,
+    org_id: UUID,
+    generation_context: "ReportGenerationContext",
+) -> OperationalReport:
+    """Re-run AI narration using the latest report's rules output and updated context."""
+    from app.services.report_context import (
+        generation_context_to_snapshot_dict,
+        link_included_jobs,
+        persist_source_jobs,
+    )
+
+    prior = (
+        db.query(OperationalReport)
+        .filter(OperationalReport.org_id == org_id)
+        .order_by(OperationalReport.generated_at.desc())
+        .first()
+    )
+    if not prior:
+        raise ValueError("No existing report to re-narrate")
+
+    job_ids = generation_context.source_job_ids or [
+        UUID(j) for j in (prior.job_ids or []) if j
+    ]
+    report = OperationalReport(
+        org_id=org_id,
+        job_ids=[str(j) for j in job_ids],
+        period_label=generation_context.period_label or prior.period_label,
+        executive_summary=list(prior.executive_summary or []),
+        financial_findings=list(prior.financial_findings or []),
+        operational_findings=list(prior.operational_findings or []),
+        risk_areas=list(prior.risk_areas or []),
+        suggested_actions=list(prior.suggested_actions or []),
+        trend_snapshot=list(prior.trend_snapshot or []),
+        health_score=prior.health_score,
+        health_status=prior.health_status,
+        data_digest=prior.data_digest,
+        domain_insights=prior.domain_insights,
+        data_coverage=prior.data_coverage,
+        analysis_metadata=prior.analysis_metadata,
+        report_contract=prior.report_contract,
+        generation_context=generation_context_to_snapshot_dict(generation_context),
+    )
+    db.add(report)
+    db.flush()
+
+    db_findings = (
+        db.query(OperationalFinding)
+        .filter(OperationalFinding.report_id == prior.id)
+        .all()
+    )
+    for f in db_findings:
+        db.add(
+            OperationalFinding(
+                org_id=org_id,
+                job_id=f.job_id,
+                report_id=report.id,
+                finding_type=f.finding_type,
+                title=f.title,
+                detail=f.detail,
+                severity=f.severity,
+                confidence=f.confidence,
+                business_impact=f.business_impact,
+                department=f.department,
+                category=f.category,
+                fingerprint=f.fingerprint,
+                finding_id=f.finding_id,
+                finding_instance_id=f.finding_instance_id,
+                suggested_action=f.suggested_action,
+                narrative=f.narrative,
+                recommendation=f.recommendation,
+            )
+        )
+    db.flush()
+
+    pack = build_evidence_pack(db, report.id)
+    persist_evidence_pack(db, report.id, pack)
+    analyst_result = run_ai_analyst(pack)
+    persist_report_narrative(db, report.id, org_id, analyst_result)
+
+    narratives = _narratives_from_analyst_output(analyst_result, [])
+    if analyst_result.output and analyst_result.output.executive_summary:
+        report.executive_summary = list(analyst_result.output.executive_summary)
+        report.analyst_summary = " ".join(analyst_result.output.executive_summary)
+    report.management_questions = _management_questions_from_analyst(analyst_result)
+    report.analysis_metadata = _analysis_metadata_from_analyst(
+        analyst_result,
+        len(db_findings),
+        report.data_coverage or {},
+    )
+    report.report_contract = finalize_report_contract(
+        report.report_contract or {},
+        db,
+        org_id,
+        [],
+        report.data_coverage or {},
+        None,
+        pack,
+        analyst_result,
+        db.get(IngestJob, job_ids[0]) if job_ids else None,
+        report.period_label or "",
+    )
+
+    persist_source_jobs(db, report.id, job_ids, included_at=generation_context.submitted_at)
+    link_included_jobs(db, report.id, job_ids)
+    db.commit()
+    db.refresh(report)
+    return report
+
+
 def delete_report(db: Session, org_id: UUID, report_id: UUID) -> bool:
     """Delete a report and its dependent rows. Returns False if not found."""
     from sqlalchemy import delete, update
@@ -521,6 +678,7 @@ def delete_report(db: Session, org_id: UUID, report_id: UUID) -> bool:
         HealthSnapshot,
         IngestJob,
         OperationalFinding,
+        OperationalReportSourceJob,
         ProductEvent,
         ReportNarrative,
         SeriesSnapshot,
@@ -530,6 +688,11 @@ def delete_report(db: Session, org_id: UUID, report_id: UUID) -> bool:
     if not report or report.org_id != org_id:
         return False
 
+    db.execute(
+        delete(OperationalReportSourceJob).where(
+            OperationalReportSourceJob.report_id == report_id
+        )
+    )
     db.execute(
         delete(OperationalFinding).where(OperationalFinding.report_id == report_id)
     )
@@ -546,3 +709,44 @@ def delete_report(db: Session, org_id: UUID, report_id: UUID) -> bool:
     db.delete(report)
     db.commit()
     return True
+
+
+def apply_narrative_overrides_to_report(report: OperationalReport) -> None:
+    """Merge stored narrative_overrides onto report fields for API output."""
+    overrides = (report.generation_context or {}).get("narrative_overrides") or {}
+    if overrides.get("executive_summary"):
+        report.executive_summary = list(overrides["executive_summary"])
+    if overrides.get("management_questions"):
+        report.management_questions = list(overrides["management_questions"])
+
+
+def patch_report(
+    db: Session,
+    org_id: UUID,
+    report_id: UUID,
+    *,
+    executive_summary: list[str] | None = None,
+    management_questions: list[str] | None = None,
+    narrative_overrides: dict | None = None,
+) -> OperationalReport | None:
+    report = db.get(OperationalReport, report_id)
+    if not report or report.org_id != org_id:
+        return None
+
+    gen_ctx = dict(report.generation_context or {})
+    overrides = dict(gen_ctx.get("narrative_overrides") or {})
+
+    if executive_summary is not None:
+        report.executive_summary = list(executive_summary)
+        overrides["executive_summary"] = list(executive_summary)
+    if management_questions is not None:
+        report.management_questions = list(management_questions)
+        overrides["management_questions"] = list(management_questions)
+    if narrative_overrides is not None:
+        overrides.update(narrative_overrides)
+
+    gen_ctx["narrative_overrides"] = overrides
+    report.generation_context = gen_ctx
+    db.commit()
+    db.refresh(report)
+    return report

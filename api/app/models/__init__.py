@@ -188,7 +188,49 @@ class OperationalReport(Base):
     period_label: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     improvement_notes: Mapped[Optional[list]] = mapped_column(JsonColumn, nullable=True)
     report_contract: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
+    generation_context: Mapped[Optional[dict]] = mapped_column(JsonColumn, nullable=True)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    source_jobs: Mapped[list["OperationalReportSourceJob"]] = relationship(
+        back_populates="report",
+        cascade="all, delete-orphan",
+    )
+
+
+class ReportContextDraft(Base):
+    __tablename__ = "report_context_drafts"
+
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), primary_key=True
+    )
+    context_schema_version: Mapped[int] = mapped_column(Integer, default=1)
+    source_job_ids: Mapped[list] = mapped_column(JsonColumn, default=list)
+    manual_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    excluded_finding_ids: Mapped[list] = mapped_column(JsonColumn, default=list)
+    evidence_overrides: Mapped[dict] = mapped_column(JsonColumn, default=dict)
+    narrative_overrides: Mapped[dict] = mapped_column(JsonColumn, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class OperationalReportSourceJob(Base):
+    __tablename__ = "operational_report_source_jobs"
+
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("operational_reports.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    ingest_job_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ingest_jobs.id"), primary_key=True
+    )
+    included_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    report: Mapped["OperationalReport"] = relationship(back_populates="source_jobs")
+    ingest_job: Mapped["IngestJob"] = relationship()
 
 
 class EvidencePackRecord(Base):

@@ -140,5 +140,6 @@ class EvidencePack(BaseModel):
     memory: EvidencePackMemory = Field(default_factory=EvidencePackMemory)
     locked_capabilities: list[EvidencePackLockedCapability] = Field(default_factory=list)
     row_details: EvidencePackRowDetails = Field(default_factory=EvidencePackRowDetails)
+    manual_context: str | None = None
 
     model_config = {"extra": "forbid"}

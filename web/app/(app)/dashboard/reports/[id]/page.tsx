@@ -18,6 +18,9 @@ import { ReportActionItems } from "@/features/dashboard/ReportActionItems";
 import { ReportAnalysisDebugPanel } from "@/features/dashboard/ReportAnalysisDebugPanel";
 import { ReportConfidenceHeader } from "@/features/dashboard/ReportConfidenceHeader";
 import { ReportFindingsList } from "@/features/dashboard/ReportFindingsList";
+import { EvidencePackEditor } from "@/features/dashboard/report-setup/EvidencePackEditor";
+import { ReportNarrativeEditor } from "@/features/dashboard/report-setup/ReportNarrativeEditor";
+import { ReportSourcesUsedPanel } from "@/features/dashboard/report-setup/ReportSourcesUsedPanel";
 import {
   OrgWideSynthesisPanel,
   PrimaryAnalysisPanel,
@@ -148,8 +151,18 @@ export default async function ReportPage({ params }: Props) {
       />
 
       <div className="flex flex-wrap gap-3">
+        <Link
+          href="/dashboard/reports/setup"
+          className="rounded-full border border-ribet-border px-5 py-2.5 text-sm font-medium text-ribet-text hover:bg-ribet-card"
+        >
+          Sources &amp; assumptions
+        </Link>
         <DeleteReportButton reportId={report.id} redirectTo="/dashboard/reports" />
       </div>
+
+      {report.sources && report.sources.length > 0 && (
+        <ReportSourcesUsedPanel sources={report.sources} />
+      )}
 
       <NarrationSetupBanner />
 
@@ -223,6 +236,16 @@ export default async function ReportPage({ params }: Props) {
             analystOutput={analystOutput}
             verifiedFindings={verifiedFindings}
           />
+
+          <ReportNarrativeEditor
+            reportId={report.id}
+            executiveSummary={report.executive_summary}
+            managementQuestions={report.management_questions ?? []}
+          />
+
+          {showAdmin && (
+            <EvidencePackEditor evidencePack={report.evidence_pack ?? null} />
+          )}
 
           <div className="grid gap-6 lg:grid-cols-2">
             <PrimaryAnalysisPanel

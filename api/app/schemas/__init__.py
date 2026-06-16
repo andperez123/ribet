@@ -11,6 +11,7 @@ from app.schemas.insights import (
     DataDigestOut,
     DomainInsightOut,
 )
+from app.schemas.report_setup import ReportSourceJobOut
 
 
 UploadStatus = Literal["pending", "processing", "done", "error", "needs_review"]
@@ -182,6 +183,8 @@ class OperationalReportOut(BaseModel):
     report_contract: dict | None = None
     evidence_pack: dict | None = None
     analyst_output: dict | None = None
+    generation_context: dict | None = None
+    sources: list[ReportSourceJobOut] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

@@ -13,6 +13,7 @@ from app.models import (
     OperationalFinding,
     OperationalMemory,
     OperationalReport,
+    OperationalReportSourceJob,
     OperationalSnapshot,
     Organization,
 )
@@ -323,6 +324,69 @@ def _build_memory_section(db: Session, org_id: UUID) -> EvidencePackMemory:
     return EvidencePackMemory(enabled=True, recurring_findings=recurring)
 
 
+def _source_job_ids_for_report(db: Session, report: OperationalReport) -> list[UUID]:
+    rows = (
+        db.query(OperationalReportSourceJob.ingest_job_id)
+        .filter(OperationalReportSourceJob.report_id == report.id)
+        .all()
+    )
+    if rows:
+        return [r[0] for r in rows]
+    gen_ctx = report.generation_context or {}
+    ids: list[UUID] = []
+    for raw in gen_ctx.get("source_job_ids") or report.job_ids or []:
+        try:
+            ids.append(UUID(str(raw)))
+        except ValueError:
+            continue
+    return ids
+
+
+def apply_evidence_overrides(pack: EvidencePack, generation_context: dict | None) -> EvidencePack:
+    if not generation_context:
+        return pack
+
+    excluded = set(generation_context.get("excluded_finding_ids") or [])
+    overrides = generation_context.get("evidence_overrides") or {}
+    manual_notes = generation_context.get("manual_notes")
+
+    findings = [f for f in pack.findings if f.finding_id not in excluded]
+
+    boundaries = pack.analysis_boundaries
+    boundary_patch = overrides.get("analysis_boundaries") or {}
+    if boundary_patch:
+        can = list(boundaries.can_conclude)
+        cannot = list(boundaries.cannot_conclude)
+        can.extend(boundary_patch.get("can_conclude") or [])
+        cannot.extend(boundary_patch.get("cannot_conclude") or [])
+        boundaries = EvidencePackAnalysisBoundaries(
+            can_conclude=can,
+            cannot_conclude=cannot,
+        )
+
+    gaps = list(pack.data_gaps)
+    gap_patches = overrides.get("data_gaps") or []
+    for patch in gap_patches:
+        if isinstance(patch, dict) and patch.get("upload"):
+            gaps.append(
+                EvidencePackDataGap(
+                    upload=str(patch["upload"]),
+                    confidence_lift=float(patch.get("confidence_lift") or 0),
+                    reason_code=str(patch.get("reason_code") or "manual_note"),
+                    priority=str(patch.get("priority") or "medium"),
+                )
+            )
+
+    return pack.model_copy(
+        update={
+            "findings": findings,
+            "analysis_boundaries": boundaries,
+            "data_gaps": gaps,
+            "manual_context": manual_notes or pack.manual_context,
+        }
+    )
+
+
 def build_evidence_pack(
     db: Session,
     report_id: UUID,
@@ -337,7 +401,7 @@ def build_evidence_pack(
     org_name = org.name if org else "Organization"
     period = report.period_label or datetime.now(timezone.utc).strftime("%Y-%m")
 
-    job_ids = [UUID(j) for j in (report.job_ids or []) if j]
+    job_ids = _source_job_ids_for_report(db, report)
     coverage_graph = get_graph_coverage(db, report.org_id)
     digest = build_data_digest(
         db,
@@ -562,7 +626,9 @@ def build_evidence_pack(
         memory=_build_memory_section(db, report.org_id),
         locked_capabilities=_locked_capabilities(org_progress),
         row_details=EvidencePackRowDetails(**row_detail_dict),
+        manual_context=(report.generation_context or {}).get("manual_notes"),
     )
+    return apply_evidence_overrides(pack, report.generation_context)
 
 
 def persist_evidence_pack(db: Session, report_id: UUID, pack: EvidencePack) -> EvidencePackRecord:

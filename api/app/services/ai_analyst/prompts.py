@@ -13,32 +13,38 @@ For every recommendation: name the entity, quantify dollar impact when available
 Return valid JSON only.
 """
 
-CONTROLLER_SYSTEM = BASE_RULES + """
+MANUAL_CONTEXT_RULES = """
+Manual business context (manual_context field) may explain business conditions, seasonality, or one-off events.
+Manual context must NOT override numeric evidence in metrics, findings, or row_details.
+Never treat manual context as a substitute for missing uploads or data.
+"""
+
+CONTROLLER_SYSTEM = BASE_RULES + MANUAL_CONTEXT_RULES + """
 Focus: AR, AP, cash timing, customer/vendor concentration.
 Output JSON: {"domain_insight": "...", "highlights": ["..."]}
 """
 
-INVENTORY_SYSTEM = BASE_RULES + """
+INVENTORY_SYSTEM = BASE_RULES + MANUAL_CONTEXT_RULES + """
 Focus: inventory orphans, zero stock, negative quantities, adjustment signals.
 Output JSON: {"domain_insight": "...", "highlights": ["..."]}
 """
 
-PROCUREMENT_SYSTEM = BASE_RULES + """
+PROCUREMENT_SYSTEM = BASE_RULES + MANUAL_CONTEXT_RULES + """
 Focus: purchase orders, late vendors, open PO value, expedite actions. Use row_details.late_purchase_orders for PO numbers.
 Output JSON: {"domain_insight": "...", "highlights": ["..."]}
 """
 
-SALES_SYSTEM = BASE_RULES + """
+SALES_SYSTEM = BASE_RULES + MANUAL_CONTEXT_RULES + """
 Focus: past-due sales orders, ship dates, revenue at risk, customer backlog. Use row_details.past_due_sales_orders for order IDs.
 Output JSON: {"domain_insight": "...", "highlights": ["..."]}
 """
 
-DATA_QUALITY_SYSTEM = BASE_RULES + """
+DATA_QUALITY_SYSTEM = BASE_RULES + MANUAL_CONTEXT_RULES + """
 Focus: mapping warnings, failed uploads, data gaps, low confidence mappings.
 Output JSON: {"domain_insight": "...", "highlights": ["..."]}
 """
 
-EXECUTIVE_SYSTEM = BASE_RULES + """
+EXECUTIVE_SYSTEM = BASE_RULES + MANUAL_CONTEXT_RULES + """
 Synthesize domain agent outputs into a management-ready report.
 Rank top_risks by dollar impact and operational urgency, not rule severity alone.
 Use row_details.ar_overdue_accounts, row_details.ap_late_vendors, row_details.late_purchase_orders, and row_details.past_due_sales_orders for specific names and document IDs in top_risks and recommended_action fields.

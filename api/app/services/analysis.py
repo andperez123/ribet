@@ -3,6 +3,7 @@ from __future__ import annotations
 """Org-level operational analysis — AI Controller entry point."""
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from app.services.graph.confidence import ConfidenceResult, compute_analysis_con
 from app.services.graph.coverage import GraphCoverage, get_graph_coverage
 from app.services.progress import recompute_org_progress
 from app.services.report import generate_report
+from app.services.report_context import ReportGenerationContext, compute_source_context_hash
 
 
 @dataclass
@@ -29,7 +31,19 @@ def run_operational_analysis(
     period: str | None = None,
 ) -> AnalysisResult:
     """Transform is complete — enrich org model, analyze, report, and sync gaps."""
-    report = generate_report(db, org_id, [trigger_job_id], period=period)
+    generation_context = ReportGenerationContext(
+        source_job_ids=[trigger_job_id],
+        submitted_at=datetime.now(timezone.utc),
+    )
+    generation_context.source_context_hash = compute_source_context_hash(generation_context)
+
+    report = generate_report(
+        db,
+        org_id,
+        [trigger_job_id],
+        period=period,
+        generation_context=generation_context,
+    )
 
     coverage = get_graph_coverage(db, org_id)
     confidence = compute_analysis_confidence(coverage)

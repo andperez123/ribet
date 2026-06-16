@@ -81,6 +81,12 @@ export default async function ReportsIndexPage() {
                         >
                           View
                         </Link>
+                        <Link
+                          href="/dashboard/reports/setup"
+                          className="font-medium text-ribet-muted hover:text-ribet-text"
+                        >
+                          Setup
+                        </Link>
                         <a
                           href={`/api/reports/${r.id}/pdf`}
                           className="font-medium text-ribet-muted hover:text-ribet-text"

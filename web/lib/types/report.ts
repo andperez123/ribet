@@ -89,6 +89,7 @@ export type TopSignal = {
 export type BlockedAnalysis = {
   analysis_name: string;
   reason: string;
+  reason_code?: string;
   requires_uploads: string[];
 };
 
@@ -256,6 +257,50 @@ export type OperationalReport = {
   report_contract?: ReportContract;
   evidence_pack?: Record<string, unknown> | null;
   analyst_output?: AnalystOutput | null;
+  generation_context?: Record<string, unknown> | null;
+  sources?: ReportSourceJob[];
+};
+
+export type ReportSourceJob = {
+  id: string;
+  file_name: string;
+  report_type?: string | null;
+  report_type_label?: string | null;
+  detected_period?: string | null;
+  row_count?: number | null;
+  status: string;
+  report_id?: string | null;
+  mapping_confidence?: number | null;
+  created_at?: string | null;
+};
+
+export type SetupWarning = {
+  code: string;
+  message: string;
+};
+
+export type SetupPreview = {
+  domains_covered: string[];
+  sectors_covered: string[];
+  analysis_confidence: number;
+  blocked_analyses: BlockedAnalysis[];
+  warnings: SetupWarning[];
+};
+
+export type ReportSetupDraft = {
+  context_schema_version: number;
+  source_job_ids: string[];
+  manual_notes?: string | null;
+  excluded_finding_ids?: string[];
+  evidence_overrides?: Record<string, unknown>;
+  narrative_overrides?: Record<string, unknown>;
+};
+
+export type ReportSetupResponse = {
+  draft: ReportSetupDraft;
+  available_jobs: ReportSourceJob[];
+  warnings: SetupWarning[];
+  preview?: SetupPreview | null;
 };
 
 export type TopRisk = {

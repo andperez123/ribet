@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 InsightSeverity = Literal["info", "watch", "alert"]
-NarrationStatus = Literal["completed", "skipped", "failed", "legacy"]
+NarrationStatus = Literal["completed", "skipped", "failed", "legacy", "fallback"]
 
 
 class TopEntryOut(BaseModel):
@@ -60,6 +60,8 @@ class DataCoverageOut(BaseModel):
     ap: bool = False
     gl: bool = False
     inventory: bool = False
+    purchase_orders: bool = False
+    sales_orders: bool = False
     ar_present: bool = False
     ar_unmapped: bool = False
     ap_aging_available: bool = False

@@ -50,6 +50,25 @@ def test_insight_invariant_fails_when_empty_insights():
         assert "domain_insights is empty" in str(e)
 
 
+def test_serialize_fallback_narration_metadata():
+    from app.services.report_insights import ReportInsightsBundle
+
+    bundle = ReportInsightsBundle(
+        data_digest={},
+        domain_insights=[],
+        data_coverage={"ar": False, "ap": False, "gl": False, "inventory": False},
+        analysis_metadata={
+            "narration": "fallback",
+            "finding_count": 3,
+            "data_domains_present": ["ar", "ap"],
+            "used_fallback": True,
+            "verification_status": "fallback",
+        },
+    )
+    serialized = serialize_insights_for_api(bundle)
+    assert serialized["analysis_metadata"]["narration"] == "fallback"
+
+
 def test_hydrate_legacy_report_computes_on_read(client):
     from app.database import SessionLocal
     from app.seed import DEMO_ORG_ID
