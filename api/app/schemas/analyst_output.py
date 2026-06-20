@@ -5,7 +5,20 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 ANALYST_OUTPUT_SCHEMA_VERSION = "analyst_output.v1"
-PROMPT_VERSION = "ai_analyst.v1"
+PROMPT_VERSION = "ai_analyst.v2"
+
+# Shared with web/lib/dashboard/insight-metrics.ts METRIC_KEYS
+METRIC_KEY_VOCABULARY = frozenset(
+    {
+        "receivables_vs_payables",
+        "collections_at_risk",
+        "customer_concentration",
+        "payables_over_60",
+        "vendor_concentration",
+        "inventory_readiness",
+        "gl_activity",
+    }
+)
 
 
 class TopRisk(BaseModel):
@@ -53,6 +66,19 @@ class DashboardExplanations(BaseModel):
     data_quality: str = ""
 
 
+class DashboardBriefing(BaseModel):
+    headline: str = ""
+    narrative: str = ""
+    focus: str = ""
+    tone: Literal["positive", "neutral", "caution", "critical"] = "neutral"
+
+
+class MetricTakeaway(BaseModel):
+    metric_key: str
+    takeaway: str
+    finding_ids: list[str] = Field(default_factory=list)
+
+
 class DomainInsightsOutput(BaseModel):
     controller: str = ""
     inventory: str = ""
@@ -66,6 +92,8 @@ class AnalystOutput(BaseModel):
     what_changed: list[WhatChangedItem] = Field(default_factory=list)
     management_questions: list[ManagementQuestion] = Field(default_factory=list)
     recommended_uploads: list[RecommendedUpload] = Field(default_factory=list)
+    dashboard_briefing: DashboardBriefing = Field(default_factory=DashboardBriefing)
+    metric_takeaways: list[MetricTakeaway] = Field(default_factory=list)
     dashboard_explanations: DashboardExplanations = Field(default_factory=DashboardExplanations)
     domain_insights: DomainInsightsOutput = Field(default_factory=DomainInsightsOutput)
     confidence_notes: list[str] = Field(default_factory=list)

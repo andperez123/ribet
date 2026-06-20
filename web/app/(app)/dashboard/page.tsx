@@ -10,7 +10,9 @@ import {
   DashboardProcessingState,
   DataNoReportState,
 } from "@/features/dashboard/DashboardStatePanels";
+import { DashboardBriefingPanel } from "@/features/dashboard/DashboardBriefingPanel";
 import { DomainStoryGrid } from "@/features/dashboard/DomainStoryGrid";
+import { ExecutiveInsightsBar } from "@/features/dashboard/ExecutiveInsightsBar";
 import { FindingsList } from "@/features/dashboard/FindingsList";
 import { NarrationSetupBanner } from "@/features/dashboard/NarrationSetupBanner";
 import { NarrativeStory } from "@/features/dashboard/NarrativeStory";
@@ -20,7 +22,11 @@ import { TrajectoryRow } from "@/features/dashboard/TrajectoryRow";
 import { UnlockRail } from "@/features/dashboard/UnlockRail";
 import { PartialDataHero } from "@/features/dashboard/PartialDataHero";
 import { UploadsTable } from "@/features/dashboard/UploadsTable";
+import { resolveDashboardBriefing } from "@/lib/dashboard/briefing";
 import { getDashboardMode } from "@/lib/dashboard/mode";
+import { metricTakeawaysMap } from "@/lib/dashboard/metric-takeaways";
+import { selectInsightMetrics } from "@/lib/dashboard/insight-metrics";
+import { deriveReportDigestCoverage } from "@/lib/dashboard/org-digest";
 import { buildTopSignals } from "@/lib/dashboard/report-signals";
 import { serverData } from "@/lib/api/server-data";
 import type { DataCoverage, DataDigest } from "@/lib/types/report";
@@ -117,11 +123,21 @@ export default async function DashboardPage({
     ...(report?.data_coverage ?? {}),
   };
 
+  const orgDigestCoverage =
+    report != null
+      ? deriveReportDigestCoverage(report, EMPTY_DIGEST, EMPTY_COVERAGE)
+      : { digest, coverage };
+  const insightMetrics = selectInsightMetrics(
+    orgDigestCoverage.digest,
+    orgDigestCoverage.coverage
+  );
+  const metricTakeaways = metricTakeawaysMap(report?.analyst_output);
+
   const mode = getDashboardMode({
     report,
     jobs: jobList,
     orgCoverage,
-    digest,
+    digest: orgDigestCoverage.digest,
   });
 
   const healthSparkline =
@@ -206,12 +222,25 @@ export default async function DashboardPage({
         <>
           <StoryHero
             report={report}
-            digest={digest}
-            coverage={coverage}
+            digest={orgDigestCoverage.digest}
+            coverage={orgDigestCoverage.coverage}
             orgCoverage={orgCoverage}
             analystOutput={report.analyst_output}
             confidenceScore={contract?.confidence_score ?? undefined}
             healthSparkline={healthSparkline}
+          />
+
+          <DashboardBriefingPanel
+            briefing={resolveDashboardBriefing(report.analyst_output)}
+            source={report.analyst_output?.source}
+          />
+
+          <ExecutiveInsightsBar
+            metrics={insightMetrics}
+            takeaways={metricTakeaways}
+            title="Across your business"
+            subtitle="Signals Ribet can verify from your uploaded data."
+            orgCoverage={orgCoverage}
           />
 
           <NarrativeStory
@@ -221,8 +250,8 @@ export default async function DashboardPage({
           />
 
           <DomainStoryGrid
-            digest={digest}
-            coverage={coverage}
+            digest={orgDigestCoverage.digest}
+            coverage={orgDigestCoverage.coverage}
             analystOutput={report.analyst_output}
           />
 

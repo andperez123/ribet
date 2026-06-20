@@ -5,6 +5,8 @@ import { AgentIntelligenceRail } from "@/features/agents/AgentIntelligenceRail";
 import { BlockedAnalysesPanel } from "@/features/dashboard/BlockedAnalysesPanel";
 import { CoverageDeltaBanner } from "@/features/dashboard/CoverageDeltaBanner";
 import { DeleteReportButton } from "@/features/dashboard/DeleteReportButton";
+import { DashboardBriefingPanel } from "@/features/dashboard/DashboardBriefingPanel";
+import { ExecutiveInsightsBar } from "@/features/dashboard/ExecutiveInsightsBar";
 import { EvidencePackPanel } from "@/features/dashboard/EvidencePackPanel";
 import { EvidenceSummaryPanel } from "@/features/dashboard/EvidenceSummaryPanel";
 import { ExecutiveAnalysisPanel } from "@/features/dashboard/ExecutiveAnalysisPanel";
@@ -37,7 +39,11 @@ import {
   getActionItems,
   sortDomainInsights,
 } from "@/lib/dashboard/report-signals";
+import { resolveDashboardBriefing } from "@/lib/dashboard/briefing";
 import { digestHasData } from "@/lib/dashboard/utils";
+import { metricTakeawaysMap } from "@/lib/dashboard/metric-takeaways";
+import { selectInsightMetrics } from "@/lib/dashboard/insight-metrics";
+import { deriveReportDigestCoverage } from "@/lib/dashboard/org-digest";
 import type {
   AnalysisMetadata,
   AnalystOutput,
@@ -118,13 +124,18 @@ export default async function ReportPage({ params }: Props) {
   if (!report) notFound();
 
   const contract = report.report_contract;
-  const digest = { ...EMPTY_DIGEST, ...(contract?.digest_kpis ?? report.data_digest ?? {}) };
-  const coverage = { ...EMPTY_COVERAGE, ...(report.data_coverage ?? {}) };
+  const analystOutput = (report.analyst_output ?? null) as AnalystOutput | null;
+  const { digest, coverage } = deriveReportDigestCoverage(
+    report,
+    EMPTY_DIGEST,
+    EMPTY_COVERAGE
+  );
+  const insightMetrics = selectInsightMetrics(digest, coverage);
+  const metricTakeaways = metricTakeawaysMap(analystOutput);
   const insights: DomainInsight[] = sortDomainInsights(
     contract?.domain_insights ?? report.domain_insights ?? []
   );
   const metadata = report.analysis_metadata ?? EMPTY_METADATA;
-  const analystOutput = (report.analyst_output ?? null) as AnalystOutput | null;
   const hasData = digestHasData(digest);
   const topSignals = buildTopSignals(report, findings ?? []);
   const actionItems = getActionItems(report, findings ?? []);
@@ -198,6 +209,19 @@ export default async function ReportPage({ params }: Props) {
           <TopSignalsHero
             signals={topSignals}
             evidenceAnchorHref={hasEvidencePack ? "#evidence-pack-detail" : undefined}
+          />
+
+          <DashboardBriefingPanel
+            briefing={resolveDashboardBriefing(analystOutput)}
+            source={analystOutput?.source}
+          />
+
+          <ExecutiveInsightsBar
+            metrics={insightMetrics}
+            takeaways={metricTakeaways}
+            title="Report at a glance"
+            subtitle="Key signals from this report's verified data."
+            orgCoverage={orgCoverage}
           />
 
           {healthScore && (

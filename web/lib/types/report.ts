@@ -319,11 +319,26 @@ export type ManagementQuestion = {
   finding_ids?: string[];
 };
 
+export type DashboardBriefing = {
+  headline: string;
+  narrative?: string;
+  focus?: string;
+  tone?: "positive" | "neutral" | "caution" | "critical";
+};
+
+export type MetricTakeaway = {
+  metric_key: string;
+  takeaway: string;
+  finding_ids?: string[];
+};
+
 export type AnalystOutput = {
   schema_version: string;
   executive_summary: string[];
   top_risks: TopRisk[];
   management_questions: ManagementQuestion[];
+  dashboard_briefing?: DashboardBriefing;
+  metric_takeaways?: MetricTakeaway[];
   dashboard_explanations?: {
     ar_risk?: string;
     cash_flow?: string;

@@ -50,6 +50,10 @@ Rank top_risks by dollar impact and operational urgency, not rule severity alone
 Use row_details.ar_overdue_accounts, row_details.ap_late_vendors, row_details.late_purchase_orders, and row_details.past_due_sales_orders for specific names and document IDs in top_risks and recommended_action fields.
 Every recommended_action must name who should act and what to do this week.
 Every recommended_upload.upload must appear in evidence pack data_gaps.
+For dashboard_briefing: write a punchy headline, 1-2 sentence narrative on what matters now, and a concrete focus action for this week. Set tone from risk level (positive|neutral|caution|critical).
+For metric_takeaways: one takeaway per applicable metric_key from this vocabulary only:
+receivables_vs_payables, collections_at_risk, customer_concentration, payables_over_60, vendor_concentration, inventory_readiness, gl_activity.
+Each takeaway must name the signal and recommend a specific action this week. Only include keys where evidence pack metrics support the signal.
 Return JSON matching this shape:
 {
   "executive_summary": ["bullet1", "bullet2"],
@@ -57,6 +61,8 @@ Return JSON matching this shape:
   "what_changed": [{"metric_key": "health.score", "narrative": "...", "finding_ids": []}],
   "management_questions": [{"question": "...", "context": "...", "finding_ids": ["F-AR-001"]}],
   "recommended_uploads": [{"upload": "GL Detail", "priority": "high", "confidence_lift": 0.1, "rationale": "...", "reason_code": "...", "finding_ids": []}],
+  "dashboard_briefing": {"headline": "...", "narrative": "...", "focus": "...", "tone": "neutral"},
+  "metric_takeaways": [{"metric_key": "collections_at_risk", "takeaway": "...", "finding_ids": ["F-AR-001"]}],
   "dashboard_explanations": {"ar_risk": "...", "cash_flow": "...", "inventory": "...", "data_quality": "..."},
   "domain_insights": {"controller": "...", "inventory": "...", "procurement": "...", "sales": "...", "data_quality": "..."},
   "confidence_notes": ["..."],

@@ -97,6 +97,32 @@ def test_verify_rejects_unknown_upload():
     assert result.passed is False
 
 
+def test_fallback_includes_dashboard_briefing_and_takeaways():
+    pack = _sample_pack(
+        metrics={
+            "ar": {"total_receivables": 100000.0, "over_90_percent": 12.0},
+            "ap": {"total_payables": 80000.0, "over_60_percent": 5.0},
+        }
+    )
+    output = build_deterministic_analyst_output(pack)
+    assert output.dashboard_briefing.headline
+    assert any(t.metric_key == "collections_at_risk" for t in output.metric_takeaways)
+    result = verify_ai_output(pack, output)
+    assert result.passed is True
+
+
+def test_verify_rejects_invalid_metric_key():
+    pack = _sample_pack()
+    output = AnalystOutput(
+        metric_takeaways=[
+            {"metric_key": "not_a_real_metric", "takeaway": "Bad key", "finding_ids": []}
+        ],
+    )
+    result = verify_ai_output(pack, output)
+    assert result.passed is False
+    assert any("metric_key" in f for f in result.failures)
+
+
 def test_fallback_recommended_uploads_trace_to_gaps():
     pack = _sample_pack(
         data_gaps=[

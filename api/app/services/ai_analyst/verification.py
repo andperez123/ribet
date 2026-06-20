@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.schemas.analyst_output import AnalystOutput, VerifyResult
+from app.schemas.analyst_output import AnalystOutput, METRIC_KEY_VOCABULARY, VerifyResult
 from app.schemas.evidence_pack import EvidencePack
 
 _NUMBER_RE = re.compile(
@@ -63,6 +63,10 @@ def _all_text_blobs(output: AnalystOutput) -> list[str]:
     texts.extend([di.controller, di.inventory, di.data_quality])
     for ci in output.conditional_insights:
         texts.append(ci.insight)
+    briefing = output.dashboard_briefing
+    texts.extend([briefing.headline, briefing.narrative, briefing.focus])
+    for takeaway in output.metric_takeaways:
+        texts.append(takeaway.takeaway)
     return texts
 
 
@@ -130,6 +134,24 @@ def no_phantom_causality(output: AnalystOutput, pack: EvidencePack) -> tuple[boo
     return len(failures) == 0, failures
 
 
+def metric_keys_valid(output: AnalystOutput) -> tuple[bool, list[str]]:
+    failures: list[str] = []
+    for takeaway in output.metric_takeaways:
+        if takeaway.metric_key not in METRIC_KEY_VOCABULARY:
+            failures.append(f"Invalid metric_key '{takeaway.metric_key}' in metric_takeaways")
+    return len(failures) == 0, failures
+
+
+def all_metric_finding_ids_valid(output: AnalystOutput, pack: EvidencePack) -> tuple[bool, list[str]]:
+    valid_ids = {f.finding_id for f in pack.findings if f.finding_id}
+    failures: list[str] = []
+    for takeaway in output.metric_takeaways:
+        for fid in takeaway.finding_ids:
+            if fid and fid not in valid_ids:
+                failures.append(f"Invalid finding_id '{fid}' in metric_takeaway '{takeaway.metric_key}'")
+    return len(failures) == 0, failures
+
+
 def confidence_notes_honest(output: AnalystOutput, pack: EvidencePack) -> tuple[bool, list[str]]:
     if not output.confidence_notes:
         return True, []
@@ -156,6 +178,8 @@ def verify_ai_output(pack: EvidencePack, output: AnalystOutput) -> VerifyResult:
         "no_phantom_causality": no_phantom_causality(output, pack)[0],
         "confidence_notes_honest": confidence_notes_honest(output, pack)[0],
         "schema_valid": schema_valid(output)[0],
+        "metric_keys_valid": metric_keys_valid(output)[0],
+        "metric_finding_ids_valid": all_metric_finding_ids_valid(output, pack)[0],
     }
     failures: list[str] = []
     for name, fn in (
@@ -165,6 +189,8 @@ def verify_ai_output(pack: EvidencePack, output: AnalystOutput) -> VerifyResult:
         ("no_phantom_causality", lambda: no_phantom_causality(output, pack)),
         ("confidence_notes_honest", lambda: confidence_notes_honest(output, pack)),
         ("schema_valid", lambda: schema_valid(output)),
+        ("metric_keys_valid", lambda: metric_keys_valid(output)),
+        ("metric_finding_ids_valid", lambda: all_metric_finding_ids_valid(output, pack)),
     ):
         ok, errs = fn()
         checks[name] = ok

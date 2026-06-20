@@ -5,9 +5,11 @@ from __future__ import annotations
 from app.schemas.analyst_output import (
     AnalystOutput,
     ConditionalInsight,
+    DashboardBriefing,
     DashboardExplanations,
     DomainInsightsOutput,
     ManagementQuestion,
+    MetricTakeaway,
     RecommendedUpload,
     TopRisk,
     WhatChangedItem,
@@ -15,6 +17,152 @@ from app.schemas.analyst_output import (
 from app.schemas.evidence_pack import EvidencePack
 
 _SEVERITY_IMPACT = {"critical": "high", "high": "high", "medium": "medium", "low": "low"}
+
+
+def _briefing_tone(pack: EvidencePack, top_risks: list[TopRisk]) -> str:
+    if any(r.impact == "high" for r in top_risks):
+        return "critical"
+    if pack.findings:
+        return "caution"
+    if pack.health.score >= 85:
+        return "positive"
+    return "neutral"
+
+
+def _build_dashboard_briefing(
+    pack: EvidencePack,
+    executive: list[str],
+    top_risks: list[TopRisk],
+    recommended_uploads: list[RecommendedUpload],
+) -> DashboardBriefing:
+    headline = executive[0] if executive else (
+        f"Operational health is {pack.health.status.lower()} at {pack.health.score}/100."
+    )
+    narrative = " ".join(executive[1:3]) if len(executive) > 1 else ""
+    focus = ""
+    if top_risks:
+        focus = top_risks[0].recommended_action
+    elif recommended_uploads:
+        focus = f"Upload {recommended_uploads[0].upload} to expand analysis."
+    return DashboardBriefing(
+        headline=headline,
+        narrative=narrative,
+        focus=focus,
+        tone=_briefing_tone(pack, top_risks),  # type: ignore[arg-type]
+    )
+
+
+def _build_metric_takeaways(pack: EvidencePack, top_risks: list[TopRisk]) -> list[MetricTakeaway]:
+    takeaways: list[MetricTakeaway] = []
+    ar = pack.metrics.get("ar", {})
+    ap = pack.metrics.get("ap", {})
+    inv = pack.metrics.get("inventory", {})
+    gl = pack.metrics.get("gl", {})
+    top_finding_ids = [f.finding_id for f in pack.findings[:1] if f.finding_id]
+
+    if ar.get("total_receivables"):
+        over_90 = float(ar.get("over_90_percent") or 0)
+        takeaways.append(
+            MetricTakeaway(
+                metric_key="collections_at_risk",
+                takeaway=(
+                    f"Review collections — {over_90:.1f}% of AR is over 90 days. "
+                    "Prioritize follow-up with accounts driving the largest balances."
+                ),
+                finding_ids=top_finding_ids,
+            )
+        )
+        customers = pack.top_entities.customers
+        if customers:
+            top = customers[0]
+            pct = top.pct_of_total or 0
+            takeaways.append(
+                MetricTakeaway(
+                    metric_key="customer_concentration",
+                    takeaway=(
+                        f"{top.name} represents {pct:.1f}% of receivables — "
+                        "monitor exposure if payment slows."
+                    ),
+                    finding_ids=top_finding_ids,
+                )
+            )
+
+    if ap.get("total_payables"):
+        over_60 = float(ap.get("over_60_percent") or 0)
+        takeaways.append(
+            MetricTakeaway(
+                metric_key="payables_over_60",
+                takeaway=(
+                    f"{over_60:.1f}% of payables are over 60 days — "
+                    "confirm cash timing with your controller."
+                ),
+                finding_ids=top_finding_ids,
+            )
+        )
+        vendors = pack.top_entities.vendors
+        if vendors:
+            top = vendors[0]
+            pct = top.pct_of_total or 0
+            takeaways.append(
+                MetricTakeaway(
+                    metric_key="vendor_concentration",
+                    takeaway=(
+                        f"{top.name} is {pct:.1f}% of open AP — "
+                        "review terms and delivery dependency."
+                    ),
+                    finding_ids=top_finding_ids,
+                )
+            )
+
+    if ar.get("total_receivables") and ap.get("total_payables"):
+        ar_total = float(ar.get("total_receivables") or 0)
+        ap_total = float(ap.get("total_payables") or 0)
+        takeaways.append(
+            MetricTakeaway(
+                metric_key="receivables_vs_payables",
+                takeaway=(
+                    f"Open AR ${ar_total:,.0f} vs AP ${ap_total:,.0f} — "
+                    "use this gap to plan near-term cash needs."
+                ),
+                finding_ids=top_finding_ids,
+            )
+        )
+
+    if inv.get("item_count"):
+        orphan_pct = float(inv.get("orphan_percent") or 0)
+        takeaways.append(
+            MetricTakeaway(
+                metric_key="inventory_readiness",
+                takeaway=(
+                    f"{orphan_pct:.1f}% of SKUs lack GL mapping — "
+                    "fix mappings before relying on inventory financials."
+                ),
+                finding_ids=top_finding_ids,
+            )
+        )
+
+    if gl.get("transaction_count") and not (ar.get("total_receivables") or ap.get("total_payables")):
+        takeaways.append(
+            MetricTakeaway(
+                metric_key="gl_activity",
+                takeaway=(
+                    f"{int(gl.get('transaction_count') or 0)} GL transactions analyzed — "
+                    "upload AR and AP aging to unlock cash-flow insights."
+                ),
+                finding_ids=top_finding_ids,
+            )
+        )
+
+    if top_risks and not takeaways:
+        takeaways.append(
+            MetricTakeaway(
+                metric_key="collections_at_risk",
+                takeaway=top_risks[0].recommended_action,
+                finding_ids=top_risks[0].finding_ids,
+            )
+        )
+
+    return takeaways
 
 
 def build_deterministic_analyst_output(pack: EvidencePack) -> AnalystOutput:
@@ -148,6 +296,10 @@ def build_deterministic_analyst_output(pack: EvidencePack) -> AnalystOutput:
         what_changed=what_changed,
         management_questions=management_questions,
         recommended_uploads=recommended_uploads,
+        dashboard_briefing=_build_dashboard_briefing(
+            pack, executive, top_risks, recommended_uploads
+        ),
+        metric_takeaways=_build_metric_takeaways(pack, top_risks),
         dashboard_explanations=dashboard,
         domain_insights=DomainInsightsOutput(
             controller=dashboard.ar_risk + " " + dashboard.cash_flow,
